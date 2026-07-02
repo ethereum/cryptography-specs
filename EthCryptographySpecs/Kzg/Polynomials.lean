@@ -44,12 +44,14 @@ def intToBytesBE (n : Nat) (len : Nat) : ByteArray :=
   ByteArray.mk <| Array.ofFn (n := len) fun i =>
     UInt8.ofNat ((n >>> ((len - 1 - i.val) * 8)) &&& 0xff)
 
+/-- Big-endian accumulation of `bytes` onto `acc`. -/
+def bytesBEToNatAux (acc : Nat) : List UInt8 → Nat
+  | [] => acc
+  | b :: rest => bytesBEToNatAux ((acc <<< 8) ||| b.toNat) rest
+
 /-- Decode big-endian bytes as a `Nat`. -/
-def bytesBEToNat (b : ByteArray) : Nat := Id.run do
-  let mut acc : Nat := 0
-  for i in [:b.size] do
-    acc := (acc <<< 8) ||| b[i]!.toNat
-  return acc
+def bytesBEToNat (b : ByteArray) : Nat :=
+  bytesBEToNatAux 0 b.data.toList
 
 /-- Hash `data` and reduce the SHA-256 output modulo the BLS modulus
 into an `Fr`. The output is not uniform over the field. -/
@@ -70,14 +72,14 @@ def bytesToBlsField (b : Bytes32) : Except KzgError Fr :=
 /-- Encode `x` as 32 big-endian bytes. -/
 @[inline] def blsFieldToBytes (x : Fr) : Bytes32 := x.toBytesBE
 
+/-- `[current, current * x, ..., current * x^(n-1)]`. -/
+def computePowersAux (x current : Fr) : Nat → List Fr
+  | 0 => []
+  | n + 1 => current :: computePowersAux x (current * x) n
+
 /-- Return `[x^0, x^1, ..., x^(n-1)]`. -/
-def computePowers (x : Fr) (n : Nat) : Array Fr := Id.run do
-  let mut current := Fr.one
-  let mut out : Array Fr := Array.mkEmpty n
-  for _ in [:n] do
-    out := out.push current
-    current := current * x
-  return out
+def computePowers (x : Fr) (n : Nat) : Array Fr :=
+  (computePowersAux x Fr.one n).toArray
 
 /-- Return the `order`-th roots of unity in `Fr`. Requires `order` to
 divide `BLS_MODULUS - 1`. -/
@@ -89,20 +91,24 @@ def computeRootsOfUnity (order : Nat) : Array Fr :=
 
 /-! ## Blob <-> Polynomial -/
 
+/-- Decode `count` 32-byte chunks of `blob`, starting at chunk index `i`.
+Throws (with the chunk index) on the first invalid field element. -/
+def blobToPolynomialAux (blob : Blob) : Nat → Nat → Except KzgError (List Fr)
+  | _, 0 => .ok []
+  | i, count + 1 =>
+    let start := i * BYTES_PER_FIELD_ELEMENT
+    let stop  := (i + 1) * BYTES_PER_FIELD_ELEMENT
+    match bytesToBlsField (blob.extract start stop) with
+    | .ok f    => do return f :: (← blobToPolynomialAux blob (i + 1) count)
+    | .error _ => throw (.invalidFieldElement (some i))
+
 /-- Convert a blob to a sequence of `Fr` field elements. Throws if the
 blob is the wrong size or any 32-byte chunk represents a value
 `≥ BLS_MODULUS`. -/
 def blobToPolynomial (blob : Blob) : Except KzgError Polynomial := do
   if blob.size ≠ BYTES_PER_BLOB then
     throw (.badBlobSize blob.size)
-  let mut poly : Array Fr := Array.mkEmpty FIELD_ELEMENTS_PER_BLOB
-  for i in [:FIELD_ELEMENTS_PER_BLOB] do
-    let start := i * BYTES_PER_FIELD_ELEMENT
-    let stop  := (i + 1) * BYTES_PER_FIELD_ELEMENT
-    match bytesToBlsField (blob.extract start stop) with
-    | .ok f    => poly := poly.push f
-    | .error _ => throw (.invalidFieldElement (some i))
-  return poly
+  return (← blobToPolynomialAux blob 0 FIELD_ELEMENTS_PER_BLOB).toArray
 
 /-! ## Evaluating a polynomial in evaluation form -/
 
@@ -110,27 +116,39 @@ def blobToPolynomial (blob : Blob) : Except KzgError Polynomial := do
 def rootsOfUnityBrp (size : Nat) : Array Fr :=
   bitReversalPermutation (computeRootsOfUnity size)
 
+/-- Barycentric sum `Σ_j p[i+j] * D[i+j] / (z - D[i+j])` over `count`
+terms, accumulated left-to-right onto `acc`. -/
+def barycentricSumAux (polynomial domain : Array Fr) (z : Fr) :
+    Fr → Nat → Nat → Fr
+  | acc, _, 0 => acc
+  | acc, i, count + 1 =>
+    let a := polynomial[i]! * domain[i]!
+    let b := z - domain[i]!
+    barycentricSumAux polynomial domain z (acc + a / b) (i + 1) count
+
+/-- `evaluatePolynomialInEvaluationForm` over an explicit evaluation
+domain. -/
+def evaluatePolynomialInEvaluationFormAux
+    (polynomial domain : Array Fr) (z : Fr) : Fr :=
+  let width := polynomial.size
+  let inverseWidth := (Fr.ofNat width).inverse
+  match domain.idxOf? z with
+  -- Fast path: z is in the domain.
+  | some i => polynomial[i]!
+  | none =>
+    -- Barycentric formula.
+    let acc := barycentricSumAux polynomial domain z Fr.zero 0 width
+    let r := z ^ (Fr.ofNat width) - Fr.one
+    acc * r * inverseWidth
+
 /-- Evaluate an evaluation-form polynomial at `z`. Indexes directly when
 `z` is in the domain; otherwise uses the barycentric formula
 `f(z) = (z^WIDTH − 1) / WIDTH · Σ_i (f(D[i]) · D[i]) / (z − D[i])`. -/
 def evaluatePolynomialInEvaluationForm
-    (polynomial : Polynomial) (z : Fr) : Fr := Id.run do
-  let width := polynomial.size
-  -- Caller must pass `width == FIELD_ELEMENTS_PER_BLOB`; the public
-  -- entry points enforce this, so we don't re-check here.
-  let inverseWidth := (Fr.ofNat width).inverse
-  let domain := rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB
-  -- Fast path: z is in the domain.
-  for i in [:domain.size] do
-    if domain[i]! == z then
-      return polynomial[i]!
-  -- Barycentric formula.
-  let mut acc : Fr := Fr.zero
-  for i in [:width] do
-    let a := polynomial[i]! * domain[i]!
-    let b := z - domain[i]!
-    acc := acc + (a / b)
-  let r := z ^ (Fr.ofNat width) - Fr.one
-  return acc * r * inverseWidth
+    (polynomial : Polynomial) (z : Fr) : Fr :=
+  -- Caller must pass `polynomial.size == FIELD_ELEMENTS_PER_BLOB`; the
+  -- public entry points enforce this, so we don't re-check here.
+  evaluatePolynomialInEvaluationFormAux polynomial
+    (rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB) z
 
 end EthCryptographySpecs.Kzg

@@ -40,6 +40,13 @@ theorem mul_one_mul (a b : Fr) : a * (one * b) = a * b := by
   rw [Nat.one_mul]
   exact mul_mk_mod a b.val
 
+/-- `one *` is the identity on any product (products are reduced modulo
+`modulus`, so this needs no canonicity hypothesis). -/
+theorem one_mul_mul (a b : Fr) : one * (a * b) = a * b := by
+  show Fr.mk (1 * (a.val * b.val % modulus) % modulus)
+      = Fr.mk (a.val * b.val % modulus)
+  rw [Nat.one_mul, Nat.mod_mod]
+
 theorem powNat_zero (a : Fr) : powNat a 0 = one := by
   simp [powNat]
 
@@ -77,5 +84,22 @@ theorem powNat_eq_powNatModel (a : Fr) (e : Nat) :
 
 theorem powNat_succ (a : Fr) (e : Nat) : powNat a (e + 1) = a * powNat a e := by
   rw [powNat_eq_powNatModel, powNat_eq_powNatModel, powNatModel]
+
+/-- A successful `fromBytesBE` implies: the input was 32 bytes, the value
+is the big-endian decoding, and the value is canonical. -/
+theorem fromBytesBE_ok {b : ByteArray} {f : Fr}
+    (h : fromBytesBE b = .ok f) :
+    b.size = 32 ∧ f.val = fromBytesBEAux 0 b.data.toList ∧
+      f.val < modulus := by
+  rw [fromBytesBE] at h
+  split at h
+  · cases h
+  · rename_i hsz
+    dsimp only [] at h
+    split at h
+    · rename_i hlt
+      cases h
+      exact ⟨by omega, rfl, hlt⟩
+    · cases h
 
 end EthCryptographySpecs.Bls.Fr

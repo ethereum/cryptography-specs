@@ -61,14 +61,18 @@ instance : Div Fr := ⟨fun a b => a * b.inverse⟩
 /-- `a ^ b` raises `a` to `b.val`, treating the exponent as an integer. -/
 instance : HPow Fr Fr Fr := ⟨fun a b => powNat a b.val⟩
 
+/-- Big-endian accumulation of `bytes` onto `acc`. -/
+def fromBytesBEAux (acc : Nat) : List UInt8 → Nat
+  | [] => acc
+  | b :: rest => fromBytesBEAux ((acc <<< 8) ||| b.toNat) rest
+
 /-- Decode a 32-byte big-endian integer as an `Fr`. Throws if the input
 has the wrong size or the integer is `≥ r`. -/
-def fromBytesBE (b : ByteArray) : Except BlsError Fr := Id.run do
-  if b.size ≠ 32 then return .error .nonCanonicalFieldElement
-  let mut acc : Nat := 0
-  for i in [:32] do
-    acc := (acc <<< 8) ||| b[i]!.toNat
-  return if acc < modulus then .ok ⟨acc⟩ else .error .nonCanonicalFieldElement
+def fromBytesBE (b : ByteArray) : Except BlsError Fr :=
+  if b.size ≠ 32 then .error .nonCanonicalFieldElement
+  else
+    let acc := fromBytesBEAux 0 b.data.toList
+    if acc < modulus then .ok ⟨acc⟩ else .error .nonCanonicalFieldElement
 
 /-- Encode as 32 big-endian bytes. -/
 def toBytesBE (a : Fr) : ByteArray :=
