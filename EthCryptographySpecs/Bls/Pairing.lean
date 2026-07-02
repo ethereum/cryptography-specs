@@ -10,7 +10,7 @@ The optimal-ate pairing for BLS12-381:
   e(P, Q) = Miller(|x|, Q', P')^((p¹² − 1) / r)
 
 where:
-  * `x = -0xD201_0000_0000_1000` is the BLS curve parameter (negative).
+  * `x = -0xD201_0000_0001_0000` is the BLS curve parameter (negative).
   * `P` ∈ G1, `Q` ∈ G2.
   * `Q'` ∈ E(Fp12) is the untwisted image of Q.
   * `P'` ∈ E(Fp12) is the trivial Fp ↪ Fp12 inclusion of P.
