@@ -15,20 +15,20 @@ open EthCryptographySpecs.Bls (Fr)
 open EthCryptographySpecs.Kzg.Constants
 
 /-- Every other element of `xs`, starting at index `start`. -/
-private def _fftHalve (xs : Array Fr) (start : Nat) : Array Fr :=
+def fftHalve (xs : Array Fr) (start : Nat) : Array Fr :=
   Array.ofFn (n := xs.size / 2) fun i => xs[start + 2 * i.val]!
 
 /-- Cooley-Tukey radix-2 forward FFT. `rootsOfUnity` must have the same
 length as `vals`. -/
-private def _fftField
+def fftFieldAux
     (vals : Array Fr) (rootsOfUnity : Array Fr)
     : Array Fr :=
   if vals.size ≤ 1 then
     vals
   else
-    let halfRoots := _fftHalve rootsOfUnity 0
-    let l := _fftField (_fftHalve vals 0) halfRoots
-    let r := _fftField (_fftHalve vals 1) halfRoots
+    let halfRoots := fftHalve rootsOfUnity 0
+    let l := fftFieldAux (fftHalve vals 0) halfRoots
+    let r := fftFieldAux (fftHalve vals 1) halfRoots
     let n := vals.size
     let halfL := l.size  -- = n / 2
     -- Butterfly: for each `i ∈ [0, n/2)` let `t = r[i] * rootsOfUnity[i]`,
@@ -42,7 +42,7 @@ private def _fftField
       if i.val < halfL then lAt + yTimesRoot
       else                  lAt - yTimesRoot
 termination_by vals.size
-decreasing_by all_goals (simp [_fftHalve]; omega)
+decreasing_by all_goals (simp [fftHalve]; omega)
 
 /-- Forward (`inv = false`) or inverse FFT (`inv = true`) over `vals`.
 The inverse reverses the roots of unity and divides each output by
@@ -56,18 +56,18 @@ def fftField
     let reversed := Array.ofFn (n := rootsOfUnity.size) fun i =>
       if i.val = 0 then rootsOfUnity[0]!
       else rootsOfUnity[rootsOfUnity.size - i.val]!
-    (_fftField vals reversed).map (· * invlen)
+    (fftFieldAux vals reversed).map (· * invlen)
   else
-    _fftField vals rootsOfUnity
+    fftFieldAux vals rootsOfUnity
 
 /-- Multiply successive elements of `vals` by successive powers of
 `factor`, starting at `shift`. -/
-private def shiftValsAux (factor : Fr) : Fr → List Fr → List Fr
+def shiftValsAux (factor : Fr) : Fr → List Fr → List Fr
   | _, [] => []
   | shift, v :: rest => (v * shift) :: shiftValsAux factor (shift * factor) rest
 
 /-- Multiply `vals[i]` by `factor ^ i`, shifting the values onto a coset. -/
-private def shiftVals
+def shiftVals
     (vals : Array Fr) (factor : Fr)
     : Array Fr :=
   (shiftValsAux factor Fr.one vals.toList).toArray

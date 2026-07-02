@@ -1,3 +1,4 @@
+import EthCryptographySpecs.Proofs.Bls
 import EthCryptographySpecs.Proofs.Kzg
 
 /-!
