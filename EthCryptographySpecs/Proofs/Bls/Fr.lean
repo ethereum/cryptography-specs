@@ -3,7 +3,7 @@ import EthCryptographySpecs.Bls.Fr
 /-!
 # Proofs: `Fr`
 
-Algebraic facts about `Fr` multiplication and `powNat`.
+Algebraic facts about `Fr` multiplication and addition and `powNat`.
 
 `Fr` does not enforce `val < modulus` by construction, so lemmas like
 `a * one = a` do not hold for non-canonical values; the lemmas below are
@@ -53,6 +53,23 @@ theorem one_mul_mul (a b : Fr) : one * (a * b) = a * b := by
       = Fr.mk (a.val * b.val % modulus)
   rw [Nat.one_mul, Nat.mod_mod]
 
+
+/-- Addition is commutative -/
+protected theorem add_comm (a b : Fr) : a + b = b + a := by
+  show Fr.mk _ = Fr.mk _
+  rw [Nat.add_comm]
+
+/-- Addition is associative -/
+protected theorem add_assoc (a b c : Fr) : a + b + c = a + (b + c) := by
+  show Fr.mk (((a.val + b.val) % modulus + c.val) % modulus)
+      = Fr.mk ((a.val + (b.val + c.val) % modulus) % modulus)
+  rw [Nat.mod_add_mod, Nat.add_mod_mod, Nat.add_assoc]
+
+/-- Addition is commutative, even with an addition before -/
+protected theorem add_right_comm (a b c : Fr) : a + b + c = a + c + b := by
+  rw [Fr.add_assoc, Fr.add_comm b, ← Fr.add_assoc]
+
+/-- 0th power is always one -/
 theorem powNat_zero (a : Fr) : powNat a 0 = one := by
   simp [powNat]
 
