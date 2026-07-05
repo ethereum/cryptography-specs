@@ -18,8 +18,6 @@ Formal proofs of properties of the specs exist in
 
 ## Building
 
-## Building
-
 ```bash
 lake exe cache get
 lake build
