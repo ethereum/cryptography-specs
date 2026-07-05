@@ -18,9 +18,16 @@ Formal proofs of properties of the specs exist in
 
 ## Building
 
+## Building
+
 ```bash
+lake exe cache get
 lake build
 ```
+
+Note: `lake exe cache get` is only needed after
+the initial clone or after `lake update`; otherwise, `lake build is sufficient`.
+
 
 ## Tests
 

@@ -18,6 +18,8 @@ self-contained Python extension.
 package «EthCryptographySpecs» where
   moreLeancArgs := #["-fPIC"]
 
+require "leanprover-community" / "mathlib" @ git "v4.29.1"
+
 @[default_target]
 lean_lib «EthCryptographySpecs» where
   precompileModules := true
