@@ -1,4 +1,5 @@
 import EthCryptographySpecs.Proofs.Bls.Fr
+import EthCryptographySpecs.Proofs.Bls.FrZMod
 
 /-!
 # `EthCryptographySpecs.Proofs.Bls`

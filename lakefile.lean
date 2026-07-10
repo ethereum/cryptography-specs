@@ -23,10 +23,6 @@ require "leanprover-community" / "mathlib" @ git "v4.29.1"
 @[default_target]
 lean_lib «EthCryptographySpecs» where
   precompileModules := true
-  leanOptions := #[
-    ⟨`linter.all, true⟩,
-    ⟨`linter.missingDocs, false⟩
-  ]
 
 /-- Proofs about the specification. A separate library (rooted at
 `EthCryptographySpecs/Proofs.lean`) so the executable spec never depends
@@ -36,7 +32,3 @@ keeps proof object files out of the Python extension link. -/
 lean_lib «Proofs» where
   roots := #[`EthCryptographySpecs.Proofs]
   precompileModules := false
-  leanOptions := #[
-    ⟨`linter.all, true⟩,
-    ⟨`linter.missingDocs, false⟩
-  ]
