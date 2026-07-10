@@ -5,65 +5,49 @@ import EthCryptographySpecs.Bls.Fr
 
 Algebraic facts about `Fr` multiplication and addition and `powNat`.
 
-`Fr` does not enforce `val < modulus` by construction, so lemmas like
-`a * one = a` do not hold for non-canonical values; the lemmas below are
-stated in forms that re-reduce modulo `modulus` and therefore hold
-unconditionally.
+`Fr` is `Fin Fr.modulus`, so every value is canonical (`val < modulus`)
+by construction and the lemmas below hold unconditionally. Several are
+thin restatements of core `Fin` lemmas, kept under the `Fr` namespace so
+downstream proofs are unaffected by the representation change.
 -/
 
 namespace EthCryptographySpecs.Bls.Fr
 
-protected theorem modulus_pos : 0 < modulus := by decide
+/-- `Fr.one` agrees with the `OfNat` numeral `1`. -/
+theorem one_eq_one : one = (1 : Fr) := rfl
 
 /-- `ofNat` always produces a canonical value. -/
 theorem val_ofNat_lt (n : Nat) : (ofNat n).val < modulus :=
-  Nat.mod_lt n Fr.modulus_pos
+  (ofNat n).isLt
 
-protected theorem mul_comm (a b : Fr) : a * b = b * a := by
-  show Fr.mk _ = Fr.mk _
-  rw [Nat.mul_comm]
+protected theorem mul_comm (a b : Fr) : a * b = b * a :=
+  Fin.mul_comm a b
 
-protected theorem mul_assoc (a b c : Fr) : a * b * c = a * (b * c) := by
-  show Fr.mk (a.val * b.val % modulus * c.val % modulus)
-      = Fr.mk (a.val * (b.val * c.val % modulus) % modulus)
-  rw [Nat.mod_mul_mod, Nat.mul_mod_mod, Nat.mul_assoc]
-
-/-- Multiplication only depends on the right operand's value modulo
-`modulus`. -/
-theorem mul_mk_mod (a : Fr) (n : Nat) : a * ⟨n % modulus⟩ = a * ⟨n⟩ := by
-  show Fr.mk _ = Fr.mk _
-  rw [Nat.mul_mod_mod]
+protected theorem mul_assoc (a b c : Fr) : a * b * c = a * (b * c) :=
+  Fin.mul_assoc a b c
 
 /-- A trailing `* one` cancels under an outer multiplication. -/
 theorem mul_mul_one (a b : Fr) : a * (b * one) = a * b := by
-  show a * ⟨b.val * 1 % modulus⟩ = a * b
-  rw [Nat.mul_one]
-  exact mul_mk_mod a b.val
+  rw [one_eq_one, Fin.mul_one]
 
 /-- A leading `one *` cancels under an outer multiplication. -/
 theorem mul_one_mul (a b : Fr) : a * (one * b) = a * b := by
-  show a * ⟨1 * b.val % modulus⟩ = a * b
-  rw [Nat.one_mul]
-  exact mul_mk_mod a b.val
+  rw [one_eq_one, Fin.one_mul]
 
-/-- `one *` is the identity on any product (products are reduced modulo
-`modulus`, so this needs no canonicity hypothesis). -/
+/-- `one *` is the identity on any product. -/
 theorem one_mul_mul (a b : Fr) : one * (a * b) = a * b := by
-  show Fr.mk (1 * (a.val * b.val % modulus) % modulus)
-      = Fr.mk (a.val * b.val % modulus)
-  rw [Nat.one_mul, Nat.mod_mod]
+  rw [one_eq_one, Fin.one_mul]
 
 
 /-- Addition is commutative -/
 protected theorem add_comm (a b : Fr) : a + b = b + a := by
-  show Fr.mk _ = Fr.mk _
-  rw [Nat.add_comm]
+  apply Fin.ext
+  rw [Fin.val_add, Fin.val_add, Nat.add_comm]
 
 /-- Addition is associative -/
 protected theorem add_assoc (a b c : Fr) : a + b + c = a + (b + c) := by
-  show Fr.mk (((a.val + b.val) % modulus + c.val) % modulus)
-      = Fr.mk ((a.val + (b.val + c.val) % modulus) % modulus)
-  rw [Nat.mod_add_mod, Nat.add_mod_mod, Nat.add_assoc]
+  apply Fin.ext
+  simp only [Fin.val_add, Nat.mod_add_mod, Nat.add_mod_mod, Nat.add_assoc]
 
 /-- Addition is commutative, even with an addition before -/
 protected theorem add_right_comm (a b c : Fr) : a + b + c = a + c + b := by
@@ -128,22 +112,13 @@ theorem fromBytesBE_ok {b : ByteArray} {f : Fr}
 
 /-- `powNat` always produces a canonical value. -/
 protected theorem powNat_val_lt (a : Fr) (e : Nat) :
-    (powNat a e).val < modulus := by
-  rw [powNat_eq_powNatModel]
-  induction e with
-  | zero =>
-    show (Fr.one).val < modulus
-    decide
-  | succ n _ =>
-    show (a * powNatModel a n).val < modulus
-    exact Nat.mod_lt _ Fr.modulus_pos
+    (powNat a e).val < modulus :=
+  (powNat a e).isLt
 
-/-- Absorbing a trailing `* one` into a `powNat`: unconditional because
-`powNat a e` is always canonical. -/
+/-- Absorbing a trailing `* one` into a `powNat`. -/
 private theorem powNat_mul_one (a : Fr) (e : Nat) :
     powNat a e * Fr.one = powNat a e := by
-  show Fr.mk ((powNat a e).val * 1 % modulus) = powNat a e
-  rw [Nat.mul_one, Nat.mod_eq_of_lt (Fr.powNat_val_lt a e)]
+  rw [one_eq_one, Fin.mul_one]
 
 /-- `a^(m + n) = a^m * a^n`. -/
 theorem powNat_add (a : Fr) (m n : Nat) :
