@@ -1,6 +1,7 @@
 import EthCryptographySpecs.Proofs.Kzg.Barycentric
 import EthCryptographySpecs.Proofs.Kzg.BitReversal
 import EthCryptographySpecs.Proofs.Kzg.Domain
+import EthCryptographySpecs.Proofs.Kzg.Evaluation
 import EthCryptographySpecs.Proofs.Kzg.Fft
 import EthCryptographySpecs.Proofs.Kzg.Polynomials
 import EthCryptographySpecs.Proofs.Kzg.Core
