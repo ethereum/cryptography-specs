@@ -1,3 +1,4 @@
+import EthCryptographySpecs.Proofs.Kzg.Barycentric
 import EthCryptographySpecs.Proofs.Kzg.BitReversal
 import EthCryptographySpecs.Proofs.Kzg.Domain
 import EthCryptographySpecs.Proofs.Kzg.Fft
