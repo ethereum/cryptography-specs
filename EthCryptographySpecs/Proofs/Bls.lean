@@ -1,3 +1,4 @@
+import EthCryptographySpecs.Proofs.Bls.FpZMod
 import EthCryptographySpecs.Proofs.Bls.Fr
 import EthCryptographySpecs.Proofs.Bls.FrZMod
 
