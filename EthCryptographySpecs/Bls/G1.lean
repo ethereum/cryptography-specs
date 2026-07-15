@@ -32,8 +32,8 @@ namespace G1
 
 /-- Affine generator of G1, embedded with `z = 1`. -/
 def generator : G1 :=
-  { x := ⟨0x17f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb⟩
-  , y := ⟨0x08b3f481e3aaa0f1a09e30ed741d8ae4fcf5e095d5d00af600db18cb2c04b3edd03cc744a2888ae40caa232946c5e7e1⟩
+  { x := Fp.ofNat 0x17f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb
+  , y := Fp.ofNat 0x08b3f481e3aaa0f1a09e30ed741d8ae4fcf5e095d5d00af600db18cb2c04b3edd03cc744a2888ae40caa232946c5e7e1
   , z := Fp.one }
 
 /-- The point at infinity. -/
@@ -95,11 +95,13 @@ def toAffine (p : G1) : Fp × Fp :=
     (p.x * zinv2, p.y * zinv3)
 
 /-- Scalar multiplication via double-and-add. -/
-partial def mulNat (p : G1) (k : Nat) : G1 :=
+def mulNat (p : G1) (k : Nat) : G1 :=
   if k = 0 then zero
   else
     let half := mulNat (double p) (k / 2)
     if k % 2 = 1 then add p half else half
+termination_by k
+decreasing_by omega
 
 @[inline] def mul (p : G1) (s : Fr) : G1 := mulNat p s.val
 
