@@ -33,6 +33,15 @@ namespace EthCryptographySpecs.Bls.G1
 open WeierstrassCurve (Jacobian)
 open WeierstrassCurve.Jacobian
 
+/-- Unfolding equation for `mulNat`. Stated here because the
+compiler-generated equations of a recursive definition are only
+available in its defining module. -/
+theorem mulNat_def (p : G1) (k : Nat) :
+    mulNat p k = if k = 0 then zero
+      else if k % 2 = 1 then add p (mulNat (double p) (k / 2))
+      else mulNat (double p) (k / 2) := by
+  rw [mulNat]
+
 /-- The BLS12-381 curve `y² = x³ + 4`, as a Mathlib Weierstrass curve
 in Jacobian coordinates over `ZMod Fp.modulus`. -/
 def curve : Jacobian (ZMod Fp.modulus) :=

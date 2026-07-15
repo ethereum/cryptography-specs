@@ -103,15 +103,6 @@ def mulNat (p : G1) (k : Nat) : G1 :=
 termination_by k
 decreasing_by omega
 
-/-- Unfolding equation for `mulNat`. Stated here because the
-compiler-generated equations of a recursive definition are only
-available in its defining module. -/
-theorem mulNat_def (p : G1) (k : Nat) :
-    mulNat p k = if k = 0 then zero
-      else if k % 2 = 1 then add p (mulNat (double p) (k / 2))
-      else mulNat (double p) (k / 2) := by
-  rw [mulNat]
-
 @[inline] def mul (p : G1) (s : Fr) : G1 := mulNat p s.val
 
 /-- Multi-scalar multiplication via windowed Pippenger.
