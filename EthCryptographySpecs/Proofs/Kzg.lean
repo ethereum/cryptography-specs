@@ -9,7 +9,6 @@ import EthCryptographySpecs.Proofs.Kzg.Recovery
 import EthCryptographySpecs.Proofs.Kzg.Cells
 import EthCryptographySpecs.Proofs.Kzg.PairingChecks
 
-
 /-!
 # `EthCryptographySpecs.Proofs.Kzg`
 
