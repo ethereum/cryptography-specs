@@ -16,17 +16,6 @@ namespace EthCryptographySpecs.Kzg
 open EthCryptographySpecs.Bls (Fr)
 open EthCryptographySpecs.Kzg.Constants
 
-/-- Summing coefficient-form polynomials spans the longer of the two. -/
-@[simp] theorem size_addPolynomialcoeff (a b : PolynomialCoeff) :
-    (addPolynomialcoeff a b).size = max a.size b.size := by
-  rw [addPolynomialcoeff]
-  by_cases h : a.size ≥ b.size
-  · rw [if_pos h]
-    simp only [Array.size_ofFn]
-    exact (Nat.max_eq_left h).symm
-  · rw [if_neg h]
-    simp only [Array.size_ofFn]
-    exact (Nat.max_eq_right (Nat.le_of_not_le h)).symm
 
 /-- A cell's coset has exactly `FIELD_ELEMENTS_PER_CELL` points. -/
 @[simp] theorem size_cosetForCell (cellIndex : CellIndex) :

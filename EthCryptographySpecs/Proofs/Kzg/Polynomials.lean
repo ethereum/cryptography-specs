@@ -130,6 +130,18 @@ theorem bytesToBlsField_ok {b : Bytes32} {f : Fr}
       rw [hval, bytesBEToNat, bytesBEToNatAux_eq_fromBytesBEAux]
     · cases h
 
+/-- Summing coefficient-form polynomials spans the longer of the two. -/
+@[simp] theorem size_addPolynomialcoeff (a b : PolynomialCoeff) :
+    (addPolynomialcoeff a b).size = max a.size b.size := by
+  rw [addPolynomialcoeff]
+  by_cases h : a.size ≥ b.size
+  · rw [if_pos h]
+    simp only [Array.size_ofFn]
+    exact (Nat.max_eq_left h).symm
+  · rw [if_neg h]
+    simp only [Array.size_ofFn]
+    exact (Nat.max_eq_right (Nat.le_of_not_le h)).symm
+
 @[simp] theorem length_computePowersAux (x current : Fr) (n : Nat) :
     (computePowersAux x current n).length = n := by
   induction n generalizing current with
