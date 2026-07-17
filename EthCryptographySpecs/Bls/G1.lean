@@ -135,10 +135,10 @@ def msm (points : Array G1) (scalars : Array Fr) : G1 := Id.run do
   let nWindows := (maxBits + w - 1) / w
   let mut acc : G1 := zero
 
-  -- Walk windows from most-significant to least.
-  let mut k : Nat := nWindows
-  while k > 0 do
-    k := k - 1
+  -- Walk windows from most-significant (k = nWindows − 1) to least
+  -- (k = 0).
+  for kk in [:nWindows] do
+    let k := nWindows - 1 - kk
     -- Shift `acc` up by `w` bits (i.e. multiply by 2^w) — except on the
     -- very first iteration, where `acc = 0` and doubling is a no-op.
     if k + 1 < nWindows then
@@ -154,14 +154,14 @@ def msm (points : Array G1) (scalars : Array Fr) : G1 := Id.run do
       if v ≠ 0 then
         buckets := buckets.set! v (add buckets[v]! points[j]!)
 
-    -- Compute Σ_{v=1}^{2^w − 1} v · buckets[v] via the running-sum trick.
+    -- Compute Σ_{v=1}^{2^w − 1} v · buckets[v] via the running-sum
+    -- trick, walking v from 2^w − 1 down to 1.
     let mut running : G1 := zero
     let mut partialSum : G1 := zero
-    let mut v : Nat := bucketCount - 1
-    while v > 0 do
+    for vv in [:bucketCount - 1] do
+      let v := bucketCount - 1 - vv
       running := add running buckets[v]!
       partialSum := add partialSum running
-      v := v - 1
     acc := add acc partialSum
 
   return acc
