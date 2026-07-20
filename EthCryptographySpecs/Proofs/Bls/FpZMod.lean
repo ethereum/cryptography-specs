@@ -455,9 +455,11 @@ def toZMod : Fp ≃+* ZMod modulus := RingEquiv.refl _
 /-! ## Bridge: spec operations = Mathlib operations -/
 
 /-- `Fp.powNat` is monoid power, phrased over `ZMod Fp.modulus`
-(definitionally `Fp`) so it is usable while constructing `Fp`'s own
-`Field` instance below. Public `Fp`-facing version: `powNat_eq_pow`. -/
-private theorem powNat_eq_zmod_pow (a : ZMod modulus) (n : Nat) :
+(definitionally `Fp`). Public (unlike `Fr`'s analogue): downstream
+proofs at large exponents must stay inside the `ZMod` instance world —
+a cross-instance defeq check on `x ^ ((p+1)/4)` would try to unfold
+the power. `Fp`-facing version: `powNat_eq_pow`. -/
+theorem powNat_eq_zmod_pow (a : ZMod modulus) (n : Nat) :
     Fp.powNat a n = a ^ n := by
   induction n using Nat.strongRecOn generalizing a with
   | _ n ih =>

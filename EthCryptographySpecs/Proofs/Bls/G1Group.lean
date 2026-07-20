@@ -199,7 +199,7 @@ equivalence lemmas at the affine level. -/
 /-- The curve equation of a valid point, in `linear_combination`-ready
 form (`y² = x³ + 4z⁶`), phrased over `rep` projections so every
 operation is syntactically over `ZMod`. -/
-private theorem valid_equation {P : G1} (h : Valid P) :
+theorem valid_equation {P : G1} (h : Valid P) :
     rep P 1 ^ 2 = rep P 0 ^ 3 + 4 * rep P 2 ^ 6 := by
   have heq := ((nonsingular_iff (rep P)).mp h).1
   rw [equation_iff] at heq
