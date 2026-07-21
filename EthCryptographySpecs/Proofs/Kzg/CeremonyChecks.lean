@@ -21,7 +21,7 @@ The theorem concerns the exact, unbatched checks. Soundness of random-linear-com
 batching is a separate probabilistic statement.
 -/
 
-namespace EthCryptographySpecs.Kzg.PairingChecks
+namespace EthCryptographySpecs.Kzg.CeremonyChecks
 
 open EthCryptographySpecs.Bls (Fr G1 G2)
 open scoped EthCryptographySpecs.Bls.Fr
@@ -380,4 +380,4 @@ theorem g2PowersFollowFromCrossGroup
   (checksSufficient laws contribution transcript checks exponents
     previousTauNonzero pubkeyNonzero).2
 
-end EthCryptographySpecs.Kzg.PairingChecks
+end EthCryptographySpecs.Kzg.CeremonyChecks
