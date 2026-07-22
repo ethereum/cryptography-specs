@@ -8,6 +8,7 @@ import EthCryptographySpecs.Proofs.Kzg.Polynomials
 import EthCryptographySpecs.Proofs.Kzg.Core
 import EthCryptographySpecs.Proofs.Kzg.Recovery
 import EthCryptographySpecs.Proofs.Kzg.Cells
+import EthCryptographySpecs.Proofs.Kzg.CeremonyChecks
 
 /-!
 # `EthCryptographySpecs.Proofs.Kzg`
