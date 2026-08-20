@@ -49,6 +49,25 @@ inductive KzgError where
   | notEnoughCells
   /-- More cells than exist in an extended blob were provided. -/
   | tooManyCells
+  /-- Polynomial division by an empty polynomial or one whose leading
+  coefficient is zero (`Fr` division alone would silently produce a
+  wrong polynomial). -/
+  | zeroDivisorPolynomial
+  /-- A coefficient-form product would exceed `FIELD_ELEMENTS_PER_EXT_BLOB`
+  coefficients. -/
+  | polynomialProductTooLong (lenA lenB : Nat)
+  /-- An evaluation-form polynomial did not have `FIELD_ELEMENTS_PER_BLOB`
+  elements. -/
+  | badPolynomialSize (actual : Nat)
+  /-- The deduplicated commitments list passed to
+  `verifyCellKzgProofBatchImpl` contained duplicates. -/
+  | duplicateCommitments
+  /-- 48-byte input failed to decompress to a G1 point. -/
+  | invalidG1Point
+  /-- Every cell of the extended blob was reported missing; the vanishing
+  polynomial for that case is not representable here (and recovery
+  requires at least half the cells anyway). -/
+  | tooManyMissingCells
 
 /-- Human-readable description, used at the C-ABI boundary. -/
 def KzgError.message : KzgError → String
@@ -72,6 +91,13 @@ def KzgError.message : KzgError → String
   | .indicesNotAscending        => "indices not strictly ascending"
   | .notEnoughCells             => "not enough cells provided"
   | .tooManyCells               => "too many cells provided"
+  | .zeroDivisorPolynomial      => "division by zero polynomial"
+  | .polynomialProductTooLong lenA lenB =>
+      s!"polynomial product too long: {lenA} + {lenB} coefficients"
+  | .badPolynomialSize actual   => s!"bad polynomial size: {actual}"
+  | .duplicateCommitments       => "duplicate commitments"
+  | .invalidG1Point             => "invalid G1 point"
+  | .tooManyMissingCells        => "too many missing cells"
 
 /-- The KZG implementation monad: `IO` (for the trusted setup) with
 typed `KzgError` domain failures. -/
