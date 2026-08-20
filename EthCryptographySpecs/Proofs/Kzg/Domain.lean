@@ -60,8 +60,10 @@ in order: element `i` is `ω ^ i`. -/
 theorem getElem_computeRootsOfUnity (order i : Nat)
     (h : i < (computeRootsOfUnity order).size) :
     (computeRootsOfUnity order)[i] = domainRoot order ^ i := by
-  show (computePowers (domainRoot order) order)[i] = _
-  rw [getElem_computePowers]
+  have hi : i < order := by rwa [size_computeRootsOfUnity] at h
+  rw [← getElem!_pos _ i h, computeRootsOfUnity_def,
+      getElem!_pos _ i (by rw [size_computePowers]; exact hi),
+      getElem_computePowers]
   exact Bls.Fr.powNat_eq_pow _ _
 
 /-- Element `i` of the bit-reversed domain is `ω ^ reverseBits i n`.

@@ -79,7 +79,12 @@ def computeRootsOfUnity (order : Nat) : Array Fr :=
   let exponent := (BLS_MODULUS - 1) / order
   let root :=
     (Fr.ofNat PRIMITIVE_ROOT_OF_UNITY) ^ (Fr.ofNat exponent)
-  computePowers root order
+  let roots := computePowers root order
+  -- A non-divisor order would silently produce a domain that is not the
+  -- order-th roots of unity (and may contain duplicates). Note `x % 0 ≠ 0`,
+  -- so `order = 0` is caught too.
+  if (BLS_MODULUS - 1) % order == 0 then roots
+  else panicWith roots s!"computeRootsOfUnity: {order} does not divide BLS_MODULUS - 1"
 
 /-! ## Polynomials in coefficient form -/
 

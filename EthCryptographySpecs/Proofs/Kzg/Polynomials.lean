@@ -185,9 +185,21 @@ theorem getElem_computePowers (x : Fr) (n i : Nat)
     rw [if_neg (Nat.succ_ne_zero i), Fr.powNat_succ, Fr.one_mul_mul,
       ← Fr.powNat_succ]
 
+/-- The divisibility guard in `computeRootsOfUnity` is logically the
+identity: the function always computes the powers of the domain root. -/
+theorem computeRootsOfUnity_def (order : Nat) :
+    computeRootsOfUnity order =
+      computePowers
+        ((Fr.ofNat PRIMITIVE_ROOT_OF_UNITY) ^
+          (Fr.ofNat ((BLS_MODULUS - 1) / order))) order := by
+  rw [computeRootsOfUnity]
+  split
+  · rfl
+  · exact panicWith_eq _ _
+
 @[simp] theorem size_computeRootsOfUnity (order : Nat) :
     (computeRootsOfUnity order).size = order := by
-  simp [computeRootsOfUnity]
+  simp [computeRootsOfUnity_def]
 
 /-- A successful `blobToPolynomialAux` returns exactly `count` elements. -/
 theorem length_blobToPolynomialAux (blob : Blob) (i count : Nat)
