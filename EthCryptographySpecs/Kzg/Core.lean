@@ -61,8 +61,14 @@ def g1Lincomb
   let pointsG1 := points.map (fun p => (Bls.G1.uncompress p).toOption.get!)
   return Bls.G1.compress (Bls.G1.msm pointsG1 scalars)
 
-/-- Given `y == p(z)`, compute `q(z)` for the KZG quotient polynomial,
-handling the special case where `z` is in the roots of unity. -/
+/-- Given `y == p(z)` for a polynomial `p(x)`, compute `q(z)`: the KZG
+quotient polynomial evaluated at `z` for the special case where `z` is in
+roots of unity.
+
+For more details, read
+https://dankradfeist.de/ethereum/2021/06/18/pcs-multiproofs.html section
+"Dividing when one of the points is zero". The code below computes q(x_m)
+for the roots of unity special case. -/
 private def computeQuotientEvalWithinDomain
     (z : Fr) (polynomial : Polynomial) (y : Fr)
     : Fr :=
@@ -74,6 +80,9 @@ private def computeQuotientEvalWithinDomain
     else
       let f_i := polynomial[i]! - y
       let numerator := f_i * omega_i
+      -- `z` is a root of unity here (the caller only reaches this function
+      -- when `z` is in the domain), so `z ≠ 0`; and `omega_i ≠ z` by the
+      -- skip above — the denominator is nonzero.
       let denominator := z * (z - omega_i)
       result + (numerator / denominator)
 

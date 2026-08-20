@@ -50,28 +50,46 @@ def cosetEvalsToCell (cosetEvals : CosetEvals) : Cell :=
 
 /-! ## Cell cosets -/
 
-/-- Shift `h` such that cell `cellIndex` is evaluated on the coset `h·G`,
-where `G` is the order-`FIELD_ELEMENTS_PER_CELL` subgroup. -/
+/-- Get the shift that determines the coset for a given `cellIndex`.
+Precisely, consider the group of roots of unity of order
+`FIELD_ELEMENTS_PER_CELL * CELLS_PER_EXT_BLOB`.
+Let `G = {1, g, g^2, ...}` denote its subgroup of order `FIELD_ELEMENTS_PER_CELL`.
+Then, the coset is defined as `h * G = {h, hg, hg^2, ...}` for an element `h`.
+This function returns `h`. -/
 private def cosetShiftForCell (cellIndex : CellIndex) : Fr :=
   let domain := rootsOfUnityBrp FIELD_ELEMENTS_PER_EXT_BLOB
   domain[FIELD_ELEMENTS_PER_CELL * cellIndex]!
 
-/-- The full evaluation coset for cell `cellIndex`. -/
+/-- Get the coset for a given `cellIndex`.
+Precisely, consider the group of roots of unity of order
+`FIELD_ELEMENTS_PER_CELL * CELLS_PER_EXT_BLOB`.
+Let `G = {1, g, g^2, ...}` denote its subgroup of order `FIELD_ELEMENTS_PER_CELL`.
+Then, the coset is defined as `h * G = {h, hg, hg^2, ...}`.
+This function, returns the coset. -/
 def cosetForCell (cellIndex : CellIndex) : Coset :=
   let domain := rootsOfUnityBrp FIELD_ELEMENTS_PER_EXT_BLOB
   let start := FIELD_ELEMENTS_PER_CELL * cellIndex
   Array.ofFn (n := FIELD_ELEMENTS_PER_CELL) fun i => domain[start + i.val]!
 
 /-- Compute a KZG multi-evaluation proof for a set of `k` points.
-For `Z(X)` the vanishing polynomial on `zs`, division gives
-`f(X) = Q(X) * Z(X) + I(X)`, where the remainder `I(X)` is the
-degree-`< k` interpolation polynomial through the evaluations at `zs`.
-The proof commits to the quotient `Q(X)`. -/
+
+This is done by committing to the following quotient polynomial:
+`Q(X) = f(X) - I(X) / Z(X)`
+Where:
+- `I(X)` is the degree `k-1` polynomial that agrees with `f(x)` at all `k` points
+- `Z(X)` is the degree `k` polynomial that evaluates to zero on all `k` points
+
+We further note that since the degree of `I(X)` is less than the degree of
+`Z(X)`, the computation can be simplified in monomial form to
+`Q(X) = f(X) / Z(X)`. -/
 private def computeKzgProofMultiImpl
     (polynomialCoeff : PolynomialCoeff) (zs : Coset) : KzgM (KZGProof × CosetEvals) := do
   let setup ← TrustedSetup.get!
+  -- For all points, compute the evaluation of those points.
   let ys : CosetEvals := zs.map (evaluatePolynomialcoeff polynomialCoeff)
+  -- Compute Z(X).
   let denominator := vanishingPolynomialcoeff zs
+  -- Compute the quotient polynomial directly in monomial form.
   let quotient := dividePolynomialcoeff polynomialCoeff denominator
   let monomial := setup.g1MonomialBytes
   let proof ← g1Lincomb (monomial.extract 0 quotient.size) quotient
@@ -126,9 +144,15 @@ def computeVerifyCellKzgProofBatchChallenge
     h ++ proofs[k]!
   Fr.hashToBlsField h
 
-/-- Verify that a set of cells belong to their corresponding commitment.
-The pairing equation has six accumulator terms, named LL, LR, RL, RLC,
-RLI, RLP in the comments below. -/
+/-- Helper: Verify that a set of cells belong to their corresponding commitment.
+
+Given a list of `commitments` (which contains no duplicates) and four lists
+representing tuples of (`commitmentIndex`, `cellIndex`, `evals`, `proof`), the
+function verifies `proof` which shows that `evals` are the evaluations of the
+polynomial associated with `commitments[commitmentIndex]`, evaluated over the
+domain specified by `cellIndex`.
+
+This function is the internal implementation of `verifyCellKzgProofBatch`. -/
 def verifyCellKzgProofBatchImpl
     (commitments : Array KZGCommitment)
     (commitmentIndices : Array CommitmentIndex)
@@ -144,6 +168,25 @@ def verifyCellKzgProofBatchImpl
     throw (.inputLengthMismatch "proofs" commitmentIndices.size proofs.size)
   if commitmentIndices.any (· ≥ commitments.size) then
     throw .commitmentIndexOutOfBounds
+
+  -- The verification equation that we will check is pairing (LL, LR) = pairing (RL, [1]), where
+  -- LL = sum_k r^k proofs[k],
+  -- LR = [s^n]
+  -- RL = RLC - RLI + RLP, where
+  --   RLC = sum_i weights[i] commitments[i]
+  --   RLI = [sum_k r^k interpolation_poly_k(s)]
+  --   RLP = sum_k (r^k * h_k^n) proofs[k]
+  --
+  -- Here, the variables have the following meaning:
+  -- - k < cellIndices.size is an index iterating over all cells in the input
+  -- - r is a random coefficient, derived from hashing all data provided by the prover
+  -- - s is the secret embedded in the KZG setup
+  -- - n = FIELD_ELEMENTS_PER_CELL is the size of the evaluation domain
+  -- - i ranges over all provided commitments
+  -- - weights[i] is a weight computed for commitment i
+  --   - It depends on r and on which cells are associated with commitment i
+  -- - interpolation_poly_k is the interpolation polynomial for the kth cell
+  -- - h_k is the coset shift specifying the evaluation domain of the kth cell
 
   let setup ← TrustedSetup.get!
   let numCells := cellIndices.size
@@ -162,6 +205,8 @@ def verifyCellKzgProofBatchImpl
   let lr : G2 := setup.g2Monomial[n]!
 
   -- Step 4.1: weights[i] = Σ_{k : commitmentIndices[k] = i} r^k.
+  -- Note: we do that by iterating over all k and updating the correct
+  -- weights[i] accordingly.
   let weights : Array Fr := (Array.range numCells).foldl
     (init := Array.replicate numCommitments Fr.zero)
     fun weights k =>
@@ -172,6 +217,8 @@ def verifyCellKzgProofBatchImpl
   let rlc : G1 := (Bls.G1.uncompress (← g1Lincomb commitments weights)).toOption.get!
 
   -- Step 4.2: RLI = [Σ_k r^k I_k(s)].
+  -- Note: an efficient implementation would use the IDFT based method
+  -- explained in the blog post linked in `verifyCellKzgProofBatch`.
   let sumInterp : PolynomialCoeff := (Array.range numCells).foldl
     (init := Array.replicate n Fr.zero)
     fun sumInterp k =>
@@ -198,6 +245,16 @@ def verifyCellKzgProofBatchImpl
   ]
 
 /-- Verify that a set of cells belong to their corresponding commitments.
+
+Given four lists representing tuples of (`commitment`, `cellIndex`, `cell`,
+`proof`), the function verifies `proof` which shows that `cell` are the
+evaluations of the polynomial associated with `commitment`, evaluated over the
+domain specified by `cellIndex`.
+
+This function implements the universal verification equation that has been
+introduced here:
+https://ethresear.ch/t/a-universal-verification-equation-for-data-availability-sampling/13240
+
 Deduplicates `commitmentsBytes` and forwards into
 `verifyCellKzgProofBatchImpl`. -/
 def verifyCellKzgProofBatch

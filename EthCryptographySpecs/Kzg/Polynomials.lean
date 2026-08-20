@@ -51,8 +51,9 @@ def bytesBEToNatAux (acc : Nat) : List UInt8 → Nat
 def bytesBEToNat (b : ByteArray) : Nat :=
   bytesBEToNatAux 0 b.data.toList
 
-/-- Decode a 32-byte big-endian integer as an `Fr`. Throws if the input
-has the wrong size or the integer is `≥ BLS_MODULUS`. -/
+/-- Convert untrusted bytes to a trusted and validated BLS scalar field
+element. This function does not accept inputs greater than the BLS modulus.
+Throws if the input has the wrong size or the integer is `≥ BLS_MODULUS`. -/
 def bytesToBlsField (b : Bytes32) : Except KzgError Fr :=
   if b.size ≠ BYTES_PER_FIELD_ELEMENT then
     .error (.badFieldElementSize b.size)
@@ -120,8 +121,12 @@ def dividePolynomialcoeff (a b : PolynomialCoeff) : PolynomialCoeff :=
       (a, #[quot] ++ o)
   o
 
-/-- Lagrange interpolation in coefficient form. Leading coefficients
-may be zero. -/
+/-- Lagrange interpolation: Finds the lowest degree polynomial that takes
+the value `ys[i]` at `xs[i]` for all i. Outputs a coefficient form
+polynomial. Leading coefficients may be zero.
+
+The entries of `xs` must be pairwise distinct: the weights invert
+`xs[i] - xs[j]`, and `Fr` inversion silently maps 0 to 0. -/
 def interpolatePolynomialcoeff
     (xs ys : Array Fr) : PolynomialCoeff :=
   (Array.range xs.size).foldl (init := #[Fr.zero]) fun r i =>
@@ -180,7 +185,9 @@ def rootsOfUnityBrp (size : Nat) : Array Fr :=
   bitReversalPermutation (computeRootsOfUnity size)
 
 /-- Barycentric sum `Σ_j p[i+j] * D[i+j] / (z - D[i+j])` over `count`
-terms, accumulated left-to-right onto `acc`. -/
+terms, accumulated left-to-right onto `acc`. The caller must ensure `z` is
+distinct from every visited `domain` entry — a zero denominator would
+silently contribute `0` (see the `Div Fr` docstring). -/
 def barycentricSumAux (polynomial domain : Array Fr) (z : Fr) :
     Fr → Nat → Nat → Fr
   | acc, _, 0 => acc
@@ -199,7 +206,9 @@ def evaluatePolynomialInEvaluationFormAux
   -- Fast path: z is in the domain.
   | some i => polynomial[i]!
   | none =>
-    -- Barycentric formula.
+    -- Barycentric formula. On this path `z ∉ domain`, and the domain (roots
+    -- of unity) has no duplicates, so every `z - domain[i]` inside the sum is
+    -- nonzero — otherwise the division would silently contribute 0.
     let acc := barycentricSumAux polynomial domain z Fr.zero 0 width
     let r := z ^ (Fr.ofNat width) - Fr.one
     acc * r * inverseWidth
