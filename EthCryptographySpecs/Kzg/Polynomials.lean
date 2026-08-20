@@ -142,7 +142,10 @@ polynomial. Leading coefficients may be zero.
 The entries of `xs` must be pairwise distinct: the weights invert
 `xs[i] - xs[j]`, and `Fr` inversion silently maps 0 to 0. -/
 def interpolatePolynomialcoeff
-    (xs ys : Array Fr) : Except KzgError PolynomialCoeff :=
+    (xs ys : Array Fr) : Except KzgError PolynomialCoeff := do
+  -- The interpolation nodes and values must come in equal numbers
+  if xs.size ≠ ys.size then
+    throw (.inputLengthMismatch "ys" xs.size ys.size)
   (Array.range xs.size).foldlM (init := #[Fr.zero]) fun r i => do
     let summand ← (Array.range ys.size).foldlM (init := #[ys[i]!])
       fun summand j =>
