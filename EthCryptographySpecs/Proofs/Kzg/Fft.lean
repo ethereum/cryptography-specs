@@ -34,6 +34,21 @@ theorem getElem_fftHalve (xs : Array Fr) (start i : Nat)
     (fftField vals rootsOfUnity inv).size = vals.size := by
   cases inv <;> simp [fftField]
 
+/-- The power-of-two guard in `fftField` is logically the identity:
+`fftField` always computes its unguarded body. -/
+theorem fftField_def (vals rootsOfUnity : Array Fr) (inv : Bool) :
+    fftField vals rootsOfUnity inv =
+      if inv then
+        (fftFieldAux vals (Array.ofFn (n := rootsOfUnity.size) fun i =>
+          if i.val = 0 then rootsOfUnity[0]!
+          else rootsOfUnity[rootsOfUnity.size - i.val]!)).map
+            (· * (Fr.ofNat vals.size).inverse)
+      else fftFieldAux vals rootsOfUnity := by
+  rw [fftField]
+  split
+  · rfl
+  · exact panicWith_eq _ _
+
 @[simp] theorem length_shiftValsAux (factor shift : Fr) (l : List Fr) :
     (shiftValsAux factor shift l).length = l.length := by
   induction l generalizing shift with

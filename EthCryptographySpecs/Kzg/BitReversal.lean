@@ -6,6 +6,10 @@
 
 namespace EthCryptographySpecs.Kzg.BitReversal
 
+/-- Check if `value` is a power of two integer. -/
+def isPowerOfTwo (value : Nat) : Bool :=
+  value > 0 && value &&& (value - 1) == 0
+
 /-- Reverse the lower `bits` bits of `x`, shifting the reversed bits into
 the accumulator `r` (pass `0` initially). -/
 def reverseBitsAux (x r : Nat) : Nat → Nat
