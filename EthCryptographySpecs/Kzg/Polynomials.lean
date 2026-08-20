@@ -232,12 +232,15 @@ def evaluatePolynomialInEvaluationFormAux
 
 /-- Evaluate an evaluation-form polynomial at `z`. Indexes directly when
 `z` is in the domain; otherwise uses the barycentric formula
-`f(z) = (z^WIDTH − 1) / WIDTH · Σ_i (f(D[i]) · D[i]) / (z − D[i])`. -/
+`f(z) = (z^WIDTH − 1) / WIDTH · Σ_i (f(D[i]) · D[i]) / (z − D[i])`.
+Throws unless the polynomial has exactly `FIELD_ELEMENTS_PER_BLOB`
+elements. -/
 def evaluatePolynomialInEvaluationForm
-    (polynomial : Polynomial) (z : Fr) : Fr :=
-  -- Caller must pass `polynomial.size == FIELD_ELEMENTS_PER_BLOB`; the
-  -- public entry points enforce this, so we don't re-check here.
-  evaluatePolynomialInEvaluationFormAux polynomial
-    (rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB) z
+    (polynomial : Polynomial) (z : Fr) : Except KzgError Fr :=
+  if polynomial.size ≠ FIELD_ELEMENTS_PER_BLOB then
+    .error (.badPolynomialSize polynomial.size)
+  else
+    .ok (evaluatePolynomialInEvaluationFormAux polynomial
+      (rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB) z)
 
 end EthCryptographySpecs.Kzg

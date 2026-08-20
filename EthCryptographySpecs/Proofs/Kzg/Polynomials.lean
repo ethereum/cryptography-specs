@@ -400,9 +400,12 @@ theorem evaluatePolynomialInEvaluationFormAux_fastPath
 the polynomial at `z` is a table lookup. -/
 theorem evaluatePolynomialInEvaluationForm_fastPath
     (polynomial : Polynomial) (z : Fr) (i : Nat)
+    (hsize : polynomial.size = FIELD_ELEMENTS_PER_BLOB)
     (h : (rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB).idxOf? z = some i) :
-    evaluatePolynomialInEvaluationForm polynomial z = polynomial[i]! :=
-  evaluatePolynomialInEvaluationFormAux_fastPath polynomial _ z i h
+    evaluatePolynomialInEvaluationForm polynomial z = .ok polynomial[i]! := by
+  rw [evaluatePolynomialInEvaluationForm, if_neg (by simp [hsize])]
+  exact congrArg Except.ok
+    (evaluatePolynomialInEvaluationFormAux_fastPath polynomial _ z i h)
 
 
 -- Proofs about barycentricSumAux and evaluation outside of the fast path--
@@ -488,13 +491,16 @@ theorem evaluatePolynomialInEvaluationFormAux_slowPath
 at `z` follows the barycentric formula. -/
 theorem evaluatePolynomialInEvaluationForm_slowPath
     (polynomial : Polynomial) (z : Fr)
+    (hsize : polynomial.size = FIELD_ELEMENTS_PER_BLOB)
     (h : (rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB).idxOf? z = none) :
     evaluatePolynomialInEvaluationForm polynomial z =
-      barycentricRefSum polynomial (rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB)
+      .ok (barycentricRefSum polynomial (rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB)
         z polynomial.size *
       (z ^ (Fr.ofNat polynomial.size) - Fr.one) *
-      (Fr.ofNat polynomial.size).inverse :=
-  evaluatePolynomialInEvaluationFormAux_slowPath polynomial _ z h
+      (Fr.ofNat polynomial.size).inverse) := by
+  rw [evaluatePolynomialInEvaluationForm, if_neg (by simp [hsize])]
+  exact congrArg Except.ok
+    (evaluatePolynomialInEvaluationFormAux_slowPath polynomial _ z h)
 
 
 end EthCryptographySpecs.Kzg

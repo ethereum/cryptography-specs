@@ -94,7 +94,7 @@ private def computeKzgProofImpl
   let domain := rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB
 
   -- For all x_i, compute p(x_i) - p(z).
-  let y := evaluatePolynomialInEvaluationForm polynomial z
+  let y ← evaluatePolynomialInEvaluationForm polynomial z
   let polynomialShifted := polynomial.map (· - y)
 
   -- For all x_i, compute (x_i - z).
@@ -244,7 +244,7 @@ def verifyBlobKzgProof
   let commitment ← bytesToKzgCommitment commitmentBytes
   let polynomial ← blobToPolynomial blob
   let evaluationChallenge := computeChallenge blob commitment
-  let y := evaluatePolynomialInEvaluationForm polynomial evaluationChallenge
+  let y ← evaluatePolynomialInEvaluationForm polynomial evaluationChallenge
   let proof ← bytesToKzgProof proofBytes
   verifyKzgProofImpl commitment evaluationChallenge y proof
 
@@ -283,7 +283,7 @@ def verifyBlobKzgProofBatch
 
         let polynomial ← blobToPolynomial blob
         let challenge := computeChallenge blob commitment
-        let y := evaluatePolynomialInEvaluationForm polynomial challenge
+        let y ← evaluatePolynomialInEvaluationForm polynomial challenge
 
         pure (commitments.push commitment, challenges.push challenge,
               ys.push y, proofs.push proof)
