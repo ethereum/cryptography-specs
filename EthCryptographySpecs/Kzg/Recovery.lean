@@ -32,6 +32,11 @@ We never encounter this case however because this method is used solely for
 recovery and recovery only works if at least half of the cells are available. -/
 def constructVanishingPolynomial
     (missingCellIndices : Array CellIndex) : Except KzgError PolynomialCoeff := do
+  -- When every cell is missing, `shortZeroPoly` below is longer than
+  -- CELLS_PER_EXT_BLOB and the fixed-size `set!` writes would silently
+  -- drop those coefficients (an out-of-range `set!` is a no-op).
+  if missingCellIndices.size ≥ CELLS_PER_EXT_BLOB then
+    throw .tooManyMissingCells
   -- Small domain: roots of unity of order CELLS_PER_EXT_BLOB.
   let rouReduced := computeRootsOfUnity CELLS_PER_EXT_BLOB
 
@@ -52,6 +57,10 @@ roots of unity will give the extended blob. -/
 def recoverPolynomialcoeff
     (cellIndices : Array CellIndex) (cosetsEvals : Array CosetEvals)
     : Except KzgError PolynomialCoeff := do
+  -- Each provided cell index needs its coset evaluations; a length
+  -- mismatch must fail rather than read zero-padded evaluations.
+  if cosetsEvals.size ≠ cellIndices.size then
+    throw (.inputLengthMismatch "cosetsEvals" cellIndices.size cosetsEvals.size)
   -- Get the extended domain. This will be referred to as the FFT domain.
   let rouExt := computeRootsOfUnity FIELD_ELEMENTS_PER_EXT_BLOB
 
