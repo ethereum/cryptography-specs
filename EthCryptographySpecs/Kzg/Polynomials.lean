@@ -104,8 +104,19 @@ def multiplyPolynomialcoeff (a b : PolynomialCoeff) :
 
 /-- Long polynomial division for two coefficient-form polynomials.
 Each step eliminates the current leading coefficient of `a` (at index
-`apos`, descending) and prepends the quotient coefficient to `o`. -/
-def dividePolynomialcoeff (a b : PolynomialCoeff) : PolynomialCoeff :=
+`apos`, descending) and prepends the quotient coefficient to `o`.
+Throws on an empty divisor, and on a divisor with a zero leading
+coefficient whenever the division loop would run. -/
+def dividePolynomialcoeff (a b : PolynomialCoeff) :
+    Except KzgError PolynomialCoeff := do
+  -- An empty divisor is invalid.
+  if b.size = 0 then
+    throw .zeroDivisorPolynomial
+  -- A zero leading coefficient would make every quotient step below a
+  -- division by zero, silently yielding 0 (see the `Div Fr` docstring)
+  -- instead of failing. Only reachable when the loop runs at least once.
+  if a.size ≥ b.size ∧ b[b.size - 1]!.isZero then
+    throw .zeroDivisorPolynomial
   let bpos := b.size - 1
   -- The divisor's leading coefficient is loop-invariant; precompute its
   -- inverse once instead of paying for a full Fermat exponentiation
@@ -122,7 +133,7 @@ def dividePolynomialcoeff (a b : PolynomialCoeff) : PolynomialCoeff :=
       let a := (Array.range b.size).foldl
         (fun a i => a.set! (diff + i) (a[diff + i]! - b[i]! * quot)) a
       (a, #[quot] ++ o)
-  o
+  return o
 
 /-- Lagrange interpolation: Finds the lowest degree polynomial that takes
 the value `ys[i]` at `xs[i]` for all i. Outputs a coefficient form

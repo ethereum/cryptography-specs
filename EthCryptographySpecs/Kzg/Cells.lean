@@ -90,7 +90,7 @@ private def computeKzgProofMultiImpl
   -- Compute Z(X).
   let denominator ← vanishingPolynomialcoeff zs
   -- Compute the quotient polynomial directly in monomial form.
-  let quotient := dividePolynomialcoeff polynomialCoeff denominator
+  let quotient ← dividePolynomialcoeff polynomialCoeff denominator
   let monomial := setup.g1MonomialBytes
   let proof ← g1Lincomb (monomial.extract 0 quotient.size) quotient
   return (proof, ys)
