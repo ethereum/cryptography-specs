@@ -32,7 +32,7 @@ theorem val_computeVerifyCellKzgProofBatchChallenge_lt
     (computeVerifyCellKzgProofBatchChallenge commitments commitmentIndices
       cellIndices cosetsEvals proofs).val < Fr.modulus := by
   rw [computeVerifyCellKzgProofBatchChallenge]
-  exact val_hashToBlsField_lt _
+  exact Fr.val_hashToBlsField_lt _
 
 /-- `cellToCosetEvals` rejects a wrongly-sized cell. -/
 theorem cellToCosetEvals_badCellSize {cell : Cell}

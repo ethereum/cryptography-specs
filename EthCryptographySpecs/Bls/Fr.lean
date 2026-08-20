@@ -1,4 +1,5 @@
 import EthCryptographySpecs.Bls.Errors
+import EthCryptographySpecs.Bls.Sha256
 
 /-!
 # `Fr`
@@ -94,6 +95,14 @@ def fromBytesBE (b : ByteArray) : Except BlsError Fr :=
 def toBytesBE (a : Fr) : ByteArray :=
   ByteArray.mk <| Array.ofFn (n := 32) fun i =>
     UInt8.ofNat ((a.val >>> ((31 - i.val) * 8)) &&& 0xff)
+
+/-- Hash `data` and convert the output to a BLS scalar field element.
+The output is not uniform over the BLS field. -/
+def hashToBlsField (data : ByteArray) : Fr :=
+  let hashedData := sha256 data
+  -- Same big-endian decoder as `fromBytesBE`; the 256-bit value is then
+  -- reduced modulo the field modulus.
+  Fr.ofNat (fromBytesBEAux 0 hashedData.data.toList)
 
 end Fr
 

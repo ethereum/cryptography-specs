@@ -108,11 +108,6 @@ theorem bytesBEToNat_intToBytesBE_of_lt {n len : Nat}
     bytesBEToNat (intToBytesBE n len) = n := by
   rw [bytesBEToNat_intToBytesBE, Nat.mod_eq_of_lt h]
 
-/-- `hashToBlsField` always produces a canonical value. -/
-theorem val_hashToBlsField_lt (data : ByteArray) :
-    (hashToBlsField data).val < Fr.modulus :=
-  Bls.Fr.val_ofNat_lt _
-
 /-- A successful `bytesToBlsField` implies: the input was 32 bytes, the
 value is the big-endian decoding, and the value is canonical. -/
 theorem bytesToBlsField_ok {b : Bytes32} {f : Fr}

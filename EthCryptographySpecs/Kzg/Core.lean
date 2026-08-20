@@ -49,7 +49,7 @@ def bytesToKzgProof (b : Bytes48) : Except KzgError KZGProof :=
 def computeChallenge (blob : Blob) (commitment : KZGCommitment) : Fr :=
   let degreePoly := intToBytesBE FIELD_ELEMENTS_PER_BLOB 16
   let data := FIAT_SHAMIR_PROTOCOL_DOMAIN ++ degreePoly ++ blob ++ commitment
-  hashToBlsField data
+  Fr.hashToBlsField data
 
 /-- BLS multi-scalar multiplication in G1, on compressed-point inputs. -/
 def g1Lincomb
@@ -175,7 +175,7 @@ private def verifyKzgProofBatch
         ++ blsFieldToBytes zs[i]!
         ++ blsFieldToBytes ys[i]!
         ++ proofs[i]!
-  let r := hashToBlsField data
+  let r := Fr.hashToBlsField data
   let rPowers := computePowers r commitments.size
 
   -- proof_lincomb = Σ_i r^i · proof_i

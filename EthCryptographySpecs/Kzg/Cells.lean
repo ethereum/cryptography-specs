@@ -124,7 +124,7 @@ def computeVerifyCellKzgProofBatchChallenge
     let h := cosetsEvals[k]!.foldl (init := h) fun h ce =>
       h ++ blsFieldToBytes ce
     h ++ proofs[k]!
-  hashToBlsField h
+  Fr.hashToBlsField h
 
 /-- Verify that a set of cells belong to their corresponding commitment.
 The pairing equation has six accumulator terms, named LL, LR, RL, RLC,

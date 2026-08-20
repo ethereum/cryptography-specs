@@ -37,9 +37,6 @@ abbrev Bytes48         := ByteArray
 
 /-! ## Bytes <-> field element helpers -/
 
-/-- SHA-256 over the input bytes. -/
-@[inline] def hash (data : ByteArray) : ByteArray := Bls.sha256 data
-
 /-- Encode `n` as `len` big-endian bytes. -/
 def intToBytesBE (n : Nat) (len : Nat) : ByteArray :=
   ByteArray.mk <| Array.ofFn (n := len) fun i =>
@@ -53,13 +50,6 @@ def bytesBEToNatAux (acc : Nat) : List UInt8 → Nat
 /-- Decode big-endian bytes as a `Nat`. -/
 def bytesBEToNat (b : ByteArray) : Nat :=
   bytesBEToNatAux 0 b.data.toList
-
-/-- Hash `data` and reduce the SHA-256 output modulo the BLS modulus
-into an `Fr`. The output is not uniform over the field. -/
-def hashToBlsField (data : ByteArray) : Fr :=
-  let h := hash data
-  -- Reduce the 256-bit hash modulo BLS_MODULUS, then construct the field element.
-  Fr.ofNat (bytesBEToNat h)
 
 /-- Decode a 32-byte big-endian integer as an `Fr`. Throws if the input
 has the wrong size or the integer is `≥ BLS_MODULUS`. -/
