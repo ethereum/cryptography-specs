@@ -83,12 +83,17 @@ def fromBytesBEAux (acc : Nat) : List UInt8 → Nat
   | [] => acc
   | b :: rest => fromBytesBEAux ((acc <<< 8) ||| b.toNat) rest
 
+/-- Decode big-endian bytes as a `Nat`. The single byte→field decoder
+shared by `fromBytesBE` and `hashToBlsField`. -/
+@[inline] def bytesBEToNat (b : ByteArray) : Nat :=
+  fromBytesBEAux 0 b.data.toList
+
 /-- Decode a 32-byte big-endian integer as an `Fr`. Throws if the input
 has the wrong size or the integer is `≥ r`. -/
 def fromBytesBE (b : ByteArray) : Except BlsError Fr :=
   if b.size ≠ 32 then .error .nonCanonicalFieldElement
   else
-    let acc := fromBytesBEAux 0 b.data.toList
+    let acc := bytesBEToNat b
     if h : acc < modulus then .ok ⟨acc, h⟩ else .error .nonCanonicalFieldElement
 
 /-- Encode as 32 big-endian bytes. -/
@@ -100,9 +105,7 @@ def toBytesBE (a : Fr) : ByteArray :=
 The output is not uniform over the BLS field. -/
 def hashToBlsField (data : ByteArray) : Fr :=
   let hashedData := sha256 data
-  -- Same big-endian decoder as `fromBytesBE`; the 256-bit value is then
-  -- reduced modulo the field modulus.
-  Fr.ofNat (fromBytesBEAux 0 hashedData.data.toList)
+  Fr.ofNat (bytesBEToNat hashedData)
 
 end Fr
 
