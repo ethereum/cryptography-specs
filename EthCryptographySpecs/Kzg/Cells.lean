@@ -56,9 +56,11 @@ Precisely, consider the group of roots of unity of order
 Let `G = {1, g, g^2, ...}` denote its subgroup of order `FIELD_ELEMENTS_PER_CELL`.
 Then, the coset is defined as `h * G = {h, hg, hg^2, ...}` for an element `h`.
 This function returns `h`. -/
-private def cosetShiftForCell (cellIndex : CellIndex) : Fr :=
+private def cosetShiftForCell (cellIndex : CellIndex) : Except KzgError Fr := do
+  if cellIndex ≥ CELLS_PER_EXT_BLOB then
+    throw .cellIndexOutOfBounds
   let domain := rootsOfUnityBrp FIELD_ELEMENTS_PER_EXT_BLOB
-  domain[FIELD_ELEMENTS_PER_CELL * cellIndex]!
+  return domain[FIELD_ELEMENTS_PER_CELL * cellIndex]!
 
 /-- Get the coset for a given `cellIndex`.
 Precisely, consider the group of roots of unity of order
@@ -66,10 +68,12 @@ Precisely, consider the group of roots of unity of order
 Let `G = {1, g, g^2, ...}` denote its subgroup of order `FIELD_ELEMENTS_PER_CELL`.
 Then, the coset is defined as `h * G = {h, hg, hg^2, ...}`.
 This function, returns the coset. -/
-def cosetForCell (cellIndex : CellIndex) : Coset :=
+def cosetForCell (cellIndex : CellIndex) : Except KzgError Coset := do
+  if cellIndex ≥ CELLS_PER_EXT_BLOB then
+    throw .cellIndexOutOfBounds
   let domain := rootsOfUnityBrp FIELD_ELEMENTS_PER_EXT_BLOB
   let start := FIELD_ELEMENTS_PER_CELL * cellIndex
-  Array.ofFn (n := FIELD_ELEMENTS_PER_CELL) fun i => domain[start + i.val]!
+  return Array.ofFn (n := FIELD_ELEMENTS_PER_CELL) fun i => domain[start + i.val]!
 
 /-- Compute a KZG multi-evaluation proof for a set of `k` points.
 
@@ -101,15 +105,15 @@ def computeCells (blob : Blob) : KzgM (Array Cell) := do
     throw (.badBlobSize blob.size)
   let polynomial ← blobToPolynomial blob
   let polynomialCoeff := polynomialEvalToCoeff polynomial
-  return Array.ofFn (n := CELLS_PER_EXT_BLOB) fun i =>
-    let coset := cosetForCell i.val
-    cosetEvalsToCell (coset.map (evaluatePolynomialcoeff polynomialCoeff))
+  (Array.range CELLS_PER_EXT_BLOB).mapM fun i => do
+    let coset ← cosetForCell i
+    pure (cosetEvalsToCell (coset.map (evaluatePolynomialcoeff polynomialCoeff)))
 
 /-- Compute cells and proofs for a polynomial in coefficient form. -/
 def computeCellsAndKzgProofsPolynomialcoeff
     (polynomialCoeff : PolynomialCoeff) : KzgM (Array Cell × Array KZGProof) := do
   let pairs ← (Array.range CELLS_PER_EXT_BLOB).mapM fun i => do
-    let (proof, ys) ← computeKzgProofMultiImpl polynomialCoeff (cosetForCell i)
+    let (proof, ys) ← computeKzgProofMultiImpl polynomialCoeff (← cosetForCell i)
     pure (cosetEvalsToCell ys, proof)
   return (pairs.map (·.1), pairs.map (·.2))
 
@@ -223,16 +227,16 @@ def verifyCellKzgProofBatchImpl
     (init := Array.replicate n Fr.zero)
     fun sumInterp k => do
       let interp ← interpolatePolynomialcoeff
-        (cosetForCell cellIndices[k]!) cosetsEvals[k]!
+        (← cosetForCell cellIndices[k]!) cosetsEvals[k]!
       let scaled ← multiplyPolynomialcoeff #[rPowers[k]!] interp
       pure (addPolynomialcoeff sumInterp scaled)
   let rli : G1 := (Bls.G1.uncompress
                   (← g1Lincomb (setup.g1MonomialBytes.extract 0 n) sumInterp)).toOption.get!
 
   -- Step 4.3: RLP = Σ_k (r^k * h_k^n) proofs[k].
-  let weightedRPowers : Array Fr := Array.ofFn (n := numCells) fun k =>
-    let h_k := cosetShiftForCell cellIndices[k.val]!
-    rPowers[k.val]! * (h_k ^ (Fr.ofNat n))
+  let weightedRPowers : Array Fr ← (Array.range numCells).mapM fun k => do
+    let h_k ← cosetShiftForCell cellIndices[k]!
+    pure (rPowers[k]! * (h_k ^ (Fr.ofNat n)))
   let rlp : G1 := (Bls.G1.uncompress (← g1Lincomb proofs weightedRPowers)).toOption.get!
 
   -- Step 4.4: RL = RLC - RLI + RLP.

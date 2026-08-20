@@ -18,9 +18,15 @@ open EthCryptographySpecs.Kzg.Constants
 
 
 /-- A cell's coset has exactly `FIELD_ELEMENTS_PER_CELL` points. -/
-@[simp] theorem size_cosetForCell (cellIndex : CellIndex) :
-    (cosetForCell cellIndex).size = FIELD_ELEMENTS_PER_CELL := by
-  simp [cosetForCell]
+theorem size_cosetForCell {cellIndex : CellIndex} {c : Coset}
+    (h : cosetForCell cellIndex = .ok c) :
+    c.size = FIELD_ELEMENTS_PER_CELL := by
+  simp only [cosetForCell, bind, Except.bind, pure, Except.pure] at h
+  repeat' split at h
+  · cases h
+  · injection h with h
+    subst h
+    simp
 
 /-- The cell-batch challenge is a canonical field element. -/
 theorem val_computeVerifyCellKzgProofBatchChallenge_lt
