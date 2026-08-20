@@ -172,6 +172,10 @@ def verifyCellKzgProofBatchImpl
     throw (.inputLengthMismatch "proofs" commitmentIndices.size proofs.size)
   if commitmentIndices.any (· ≥ commitments.size) then
     throw .commitmentIndexOutOfBounds
+  -- The commitments list must contain no duplicates
+  if (Array.range commitments.size).any
+      (fun i => commitments.idxOf? commitments[i]! ≠ some i) then
+    throw .duplicateCommitments
 
   -- The verification equation that we will check is pairing (LL, LR) = pairing (RL, [1]), where
   -- LL = sum_k r^k proofs[k],
