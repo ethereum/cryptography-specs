@@ -58,7 +58,13 @@ def g1Lincomb
     throw (.lincombLengthMismatch points.size scalars.size)
   if points.size = 0 then
     return Bls.G1.compress Bls.G1.zero
-  let pointsG1 := points.map (fun p => (Bls.G1.uncompress p).toOption.get!)
+  -- An undecodable 48-byte input must fail: the `Inhabited` default of
+  -- `G1` is the point at infinity, so it would silently drop out of the
+  -- multi-scalar multiplication.
+  let pointsG1 ← points.mapM fun p =>
+    match Bls.G1.uncompress p with
+    | .ok g    => pure g
+    | .error _ => throw KzgError.invalidG1Point
   return Bls.G1.compress (Bls.G1.msm pointsG1 scalars)
 
 /-- Given `y == p(z)` for a polynomial `p(x)`, compute `q(z)`: the KZG
