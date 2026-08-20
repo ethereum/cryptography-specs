@@ -31,18 +31,18 @@ vanishing polynomial could be computed as `Z(x) = x^n - 1`, where `n` is
 We never encounter this case however because this method is used solely for
 recovery and recovery only works if at least half of the cells are available. -/
 def constructVanishingPolynomial
-    (missingCellIndices : Array CellIndex) : PolynomialCoeff :=
+    (missingCellIndices : Array CellIndex) : Except KzgError PolynomialCoeff := do
   -- Small domain: roots of unity of order CELLS_PER_EXT_BLOB.
   let rouReduced := computeRootsOfUnity CELLS_PER_EXT_BLOB
 
   -- Vanishing polynomial over the small domain (roots in BRP order).
   let xs : Array Fr := missingCellIndices.map fun mci =>
     rouReduced[reverseBits mci CELLS_PER_EXT_BLOB]!
-  let shortZeroPoly := vanishingPolynomialcoeff xs
+  let shortZeroPoly ← vanishingPolynomialcoeff xs
 
   -- Extend to the full domain using the closed form of the vanishing
   -- polynomial over a coset.
-  (Array.range shortZeroPoly.size).foldl
+  return (Array.range shortZeroPoly.size).foldl
     (init := Array.replicate FIELD_ELEMENTS_PER_EXT_BLOB Fr.zero)
     fun zeroPoly i =>
       zeroPoly.set! (i * FIELD_ELEMENTS_PER_CELL) shortZeroPoly[i]!
@@ -51,7 +51,7 @@ def constructVanishingPolynomial
 roots of unity will give the extended blob. -/
 def recoverPolynomialcoeff
     (cellIndices : Array CellIndex) (cosetsEvals : Array CosetEvals)
-    : PolynomialCoeff :=
+    : Except KzgError PolynomialCoeff := do
   -- Get the extended domain. This will be referred to as the FFT domain.
   let rouExt := computeRootsOfUnity FIELD_ELEMENTS_PER_EXT_BLOB
 
@@ -74,7 +74,7 @@ def recoverPolynomialcoeff
   -- CELLS_PER_EXT_BLOB = 128; an Array.contains lookup is plenty fast.
   let missing : Array CellIndex :=
     (Array.range CELLS_PER_EXT_BLOB).filter fun ci => !cellIndices.contains ci
-  let zeroPolyCoeff := constructVanishingPolynomial missing
+  let zeroPolyCoeff ← constructVanishingPolynomial missing
 
   -- Convert Z(x) to evaluation form over the FFT domain.
   let zeroPolyEval := fftField zeroPolyCoeff rouExt
@@ -109,7 +109,7 @@ def recoverPolynomialcoeff
   -- Convert P(x) to coefficient form.
   let pCoeff := cosetFftField pOverCoset rouExt (inv := true)
 
-  pCoeff.extract 0 FIELD_ELEMENTS_PER_BLOB
+  return pCoeff.extract 0 FIELD_ELEMENTS_PER_BLOB
 
 /-- Given at least 50% of cells for a blob, recover all the cells/proofs.
 This algorithm uses FFTs to recover cells faster than using Lagrange
@@ -152,7 +152,7 @@ def recoverCellsAndKzgProofs
   let cosetsEvals : Array CosetEvals ← cells.mapM fun c =>
     cellToCosetEvals c
 
-  let polyCoeff := recoverPolynomialcoeff cellIndices cosetsEvals
+  let polyCoeff ← recoverPolynomialcoeff cellIndices cosetsEvals
   computeCellsAndKzgProofsPolynomialcoeff polyCoeff
 
 end EthCryptographySpecs.Kzg

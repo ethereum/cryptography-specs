@@ -88,7 +88,7 @@ private def computeKzgProofMultiImpl
   -- For all points, compute the evaluation of those points.
   let ys : CosetEvals := zs.map (evaluatePolynomialcoeff polynomialCoeff)
   -- Compute Z(X).
-  let denominator := vanishingPolynomialcoeff zs
+  let denominator ← vanishingPolynomialcoeff zs
   -- Compute the quotient polynomial directly in monomial form.
   let quotient := dividePolynomialcoeff polynomialCoeff denominator
   let monomial := setup.g1MonomialBytes
@@ -219,13 +219,13 @@ def verifyCellKzgProofBatchImpl
   -- Step 4.2: RLI = [Σ_k r^k I_k(s)].
   -- Note: an efficient implementation would use the IDFT based method
   -- explained in the blog post linked in `verifyCellKzgProofBatch`.
-  let sumInterp : PolynomialCoeff := (Array.range numCells).foldl
+  let sumInterp : PolynomialCoeff ← (Array.range numCells).foldlM
     (init := Array.replicate n Fr.zero)
-    fun sumInterp k =>
-      let interp := interpolatePolynomialcoeff
+    fun sumInterp k => do
+      let interp ← interpolatePolynomialcoeff
         (cosetForCell cellIndices[k]!) cosetsEvals[k]!
-      let scaled := multiplyPolynomialcoeff #[rPowers[k]!] interp
-      addPolynomialcoeff sumInterp scaled
+      let scaled ← multiplyPolynomialcoeff #[rPowers[k]!] interp
+      pure (addPolynomialcoeff sumInterp scaled)
   let rli : G1 := (Bls.G1.uncompress
                   (← g1Lincomb (setup.g1MonomialBytes.extract 0 n) sumInterp)).toOption.get!
 

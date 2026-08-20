@@ -90,10 +90,13 @@ def addPolynomialcoeff (a b : PolynomialCoeff) : PolynomialCoeff :=
     let bi := if i.val < b.size then b[i.val]! else Fr.zero
     a[i.val]! + bi
 
-/-- Multiply the coefficient-form polynomials `a` and `b`. -/
-def multiplyPolynomialcoeff (a b : PolynomialCoeff) : PolynomialCoeff :=
-  -- Caller must ensure `len(a) + len(b) ≤ FIELD_ELEMENTS_PER_EXT_BLOB`.
-  (Array.range a.size).foldl (init := #[Fr.zero]) fun r power =>
+/-- Multiply the coefficient-form polynomials `a` and `b`. Throws if the
+product would exceed `FIELD_ELEMENTS_PER_EXT_BLOB` coefficients. -/
+def multiplyPolynomialcoeff (a b : PolynomialCoeff) :
+    Except KzgError PolynomialCoeff := do
+  if a.size + b.size > FIELD_ELEMENTS_PER_EXT_BLOB then
+    throw (.polynomialProductTooLong a.size b.size)
+  return (Array.range a.size).foldl (init := #[Fr.zero]) fun r power =>
     let coef := a[power]!
     let summand : PolynomialCoeff :=
       Array.replicate power Fr.zero ++ b.map (· * coef)
@@ -128,20 +131,20 @@ polynomial. Leading coefficients may be zero.
 The entries of `xs` must be pairwise distinct: the weights invert
 `xs[i] - xs[j]`, and `Fr` inversion silently maps 0 to 0. -/
 def interpolatePolynomialcoeff
-    (xs ys : Array Fr) : PolynomialCoeff :=
-  (Array.range xs.size).foldl (init := #[Fr.zero]) fun r i =>
-    let summand := (Array.range ys.size).foldl (init := #[ys[i]!])
+    (xs ys : Array Fr) : Except KzgError PolynomialCoeff :=
+  (Array.range xs.size).foldlM (init := #[Fr.zero]) fun r i => do
+    let summand ← (Array.range ys.size).foldlM (init := #[ys[i]!])
       fun summand j =>
         if j ≠ i then
           let weightAdj := (xs[i]! - xs[j]!).inverse
           multiplyPolynomialcoeff summand #[(-weightAdj) * xs[j]!, weightAdj]
         else
-          summand
-    addPolynomialcoeff r summand
+          pure summand
+    return addPolynomialcoeff r summand
 
 /-- Compute the vanishing polynomial on `xs` (coefficient form). -/
-def vanishingPolynomialcoeff (xs : Array Fr) : PolynomialCoeff :=
-  xs.foldl (init := #[Fr.one]) fun p x =>
+def vanishingPolynomialcoeff (xs : Array Fr) : Except KzgError PolynomialCoeff :=
+  xs.foldlM (init := #[Fr.one]) fun p x =>
     multiplyPolynomialcoeff p #[-x, Fr.one]
 
 /-- Evaluate a coefficient-form polynomial at `z` using Horner's schema. -/

@@ -24,24 +24,33 @@ private theorem size_foldl_of_size_step {α β : Type _} (xs : Array β)
     (fun i acc h => (hf acc xs[i]).trans h)
 
 /-- The extended vanishing polynomial spans the full extended domain. -/
-@[simp] theorem size_constructVanishingPolynomial
-    (missingCellIndices : Array CellIndex) :
-    (constructVanishingPolynomial missingCellIndices).size
-      = FIELD_ELEMENTS_PER_EXT_BLOB := by
-  simp only [constructVanishingPolynomial]
-  rw [size_foldl_of_size_step]
-  · simp
-  · exact fun acc b => Array.size_setIfInBounds
+theorem size_constructVanishingPolynomial
+    {missingCellIndices : Array CellIndex} {p : PolynomialCoeff}
+    (h : constructVanishingPolynomial missingCellIndices = .ok p) :
+    p.size = FIELD_ELEMENTS_PER_EXT_BLOB := by
+  simp only [constructVanishingPolynomial, bind, Except.bind] at h
+  split at h
+  · cases h
+  · simp only [pure, Except.pure, Except.ok.injEq] at h
+    subst h
+    rw [size_foldl_of_size_step]
+    · simp
+    · exact fun acc b => Array.size_setIfInBounds
 
-/-- The recovered polynomial has exactly `FIELD_ELEMENTS_PER_BLOB`
-coefficients, whatever the inputs. -/
-@[simp] theorem size_recoverPolynomialcoeff
-    (cellIndices : Array CellIndex) (cosetsEvals : Array CosetEvals) :
-    (recoverPolynomialcoeff cellIndices cosetsEvals).size
-      = FIELD_ELEMENTS_PER_BLOB := by
-  simp only [recoverPolynomialcoeff]
-  simp [FIELD_ELEMENTS_PER_EXT_BLOB]
-  omega
+/-- On success, the recovered polynomial has exactly
+`FIELD_ELEMENTS_PER_BLOB` coefficients, whatever the inputs. -/
+theorem size_recoverPolynomialcoeff
+    {cellIndices : Array CellIndex} {cosetsEvals : Array CosetEvals}
+    {p : PolynomialCoeff}
+    (h : recoverPolynomialcoeff cellIndices cosetsEvals = .ok p) :
+    p.size = FIELD_ELEMENTS_PER_BLOB := by
+  simp only [recoverPolynomialcoeff, bind, Except.bind] at h
+  split at h
+  · cases h
+  · simp only [pure, Except.pure, Except.ok.injEq] at h
+    subst h
+    simp [FIELD_ELEMENTS_PER_EXT_BLOB]
+    omega
 
 /-- `recoverCellsAndKzgProofs` rejects a cells array whose length does
 not match the indices array. -/
