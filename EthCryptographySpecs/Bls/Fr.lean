@@ -58,13 +58,20 @@ def powNat (base : Fr) (e : Nat) : Fr :=
 termination_by e
 decreasing_by omega
 
-/-- Multiplicative inverse via Fermat's little theorem. -/
+/-- Multiplicative inverse via Fermat's little theorem: computes
+`a^(modulus - 2)`, hence **`(0 : Fr).inverse = 0`** rather than an
+error. Call sites must therefore ensure the argument is nonzero, or
+document why it is. -/
 @[inline] def inverse (a : Fr) : Fr := powNat a (modulus - 2)
 
-/-- Field division `a * b⁻¹`. Registered with high priority because core
-already has a `Div (Fin n)` instance that performs *`Nat` division* of
-the underlying values — silently picking that one up would be wrong for
-a field element, so this instance must shadow it. -/
+/-- Field division `a * b⁻¹`. Because `inverse` maps `0` to `0`,
+**every division by zero evaluates to `0` instead of failing**: `a / b`
+silently returns `0` when `b = 0`. Call sites must ensure the
+denominator is nonzero, or document why it is. Registered with high
+priority because core already has a `Div (Fin n)` instance that
+performs *`Nat` division* of the underlying values — silently picking
+that one up would be wrong for a field element, so this instance must
+shadow it. -/
 instance (priority := high) : Div Fr := ⟨fun a b => a * b.inverse⟩
 
 /-- `a ^ b` raises `a` to `b.val`, treating the exponent as an integer. -/
