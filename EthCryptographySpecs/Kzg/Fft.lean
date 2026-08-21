@@ -49,15 +49,21 @@ The inverse reverses the roots of unity and divides each output by
 def fftField
     (vals : Array Fr) (rootsOfUnity : Array Fr)
     (inv : Bool := false) : Array Fr :=
-  if inv then
-    let invlen := (Fr.ofNat vals.size).inverse
-    -- Reverse: keep roots[0] then reverse roots[1..]
-    let reversed := Array.ofFn (n := rootsOfUnity.size) fun i =>
-      if i.val = 0 then rootsOfUnity[0]!
-      else rootsOfUnity[rootsOfUnity.size - i.val]!
-    (fftFieldAux vals reversed).map (· * invlen)
-  else
-    fftFieldAux vals rootsOfUnity
+  let out :=
+    if inv then
+      let invlen := (Fr.ofNat vals.size).inverse
+      -- Reverse: keep roots[0] then reverse roots[1..]
+      let reversed := Array.ofFn (n := rootsOfUnity.size) fun i =>
+        if i.val = 0 then rootsOfUnity[0]!
+        else rootsOfUnity[rootsOfUnity.size - i.val]!
+      (fftFieldAux vals reversed).map (· * invlen)
+    else
+      fftFieldAux vals rootsOfUnity
+  -- Only (non-empty) power-of-two input lengths are legal: `fftHalve`
+  -- silently truncates an odd length reached during recursion instead of
+  -- failing, and the empty input has no well-defined transform.
+  if vals.size.isPowerOfTwo then out
+  else panicWith out s!"fftField: input length {vals.size} is not a power of two"
 
 /-- Multiply successive elements of `vals` by successive powers of
 `factor`, starting at `shift`. -/

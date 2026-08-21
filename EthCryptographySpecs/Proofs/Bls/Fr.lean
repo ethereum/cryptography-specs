@@ -20,6 +20,11 @@ theorem one_eq_one : one = (1 : Fr) := rfl
 theorem val_ofNat_lt (n : Nat) : (ofNat n).val < modulus :=
   (ofNat n).isLt
 
+/-- `hashToBlsField` always produces a canonical value. -/
+theorem val_hashToBlsField_lt (data : ByteArray) :
+    (hashToBlsField data).val < modulus :=
+  val_ofNat_lt _
+
 protected theorem mul_comm (a b : Fr) : a * b = b * a :=
   Fin.mul_comm a b
 

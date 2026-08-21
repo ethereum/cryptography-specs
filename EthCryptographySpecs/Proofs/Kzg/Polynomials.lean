@@ -108,11 +108,6 @@ theorem bytesBEToNat_intToBytesBE_of_lt {n len : Nat}
     bytesBEToNat (intToBytesBE n len) = n := by
   rw [bytesBEToNat_intToBytesBE, Nat.mod_eq_of_lt h]
 
-/-- `hashToBlsField` always produces a canonical value. -/
-theorem val_hashToBlsField_lt (data : ByteArray) :
-    (hashToBlsField data).val < Fr.modulus :=
-  Bls.Fr.val_ofNat_lt _
-
 /-- A successful `bytesToBlsField` implies: the input was 32 bytes, the
 value is the big-endian decoding, and the value is canonical. -/
 theorem bytesToBlsField_ok {b : Bytes32} {f : Fr}
@@ -190,9 +185,21 @@ theorem getElem_computePowers (x : Fr) (n i : Nat)
     rw [if_neg (Nat.succ_ne_zero i), Fr.powNat_succ, Fr.one_mul_mul,
       ← Fr.powNat_succ]
 
+/-- The divisibility guard in `computeRootsOfUnity` is logically the
+identity: the function always computes the powers of the domain root. -/
+theorem computeRootsOfUnity_def (order : Nat) :
+    computeRootsOfUnity order =
+      computePowers
+        ((Fr.ofNat PRIMITIVE_ROOT_OF_UNITY) ^
+          (Fr.ofNat ((BLS_MODULUS - 1) / order))) order := by
+  rw [computeRootsOfUnity]
+  split
+  · rfl
+  · exact panicWith_eq _ _
+
 @[simp] theorem size_computeRootsOfUnity (order : Nat) :
     (computeRootsOfUnity order).size = order := by
-  simp [computeRootsOfUnity]
+  simp [computeRootsOfUnity_def]
 
 /-- A successful `blobToPolynomialAux` returns exactly `count` elements. -/
 theorem length_blobToPolynomialAux (blob : Blob) (i count : Nat)
@@ -405,9 +412,12 @@ theorem evaluatePolynomialInEvaluationFormAux_fastPath
 the polynomial at `z` is a table lookup. -/
 theorem evaluatePolynomialInEvaluationForm_fastPath
     (polynomial : Polynomial) (z : Fr) (i : Nat)
+    (hsize : polynomial.size = FIELD_ELEMENTS_PER_BLOB)
     (h : (rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB).idxOf? z = some i) :
-    evaluatePolynomialInEvaluationForm polynomial z = polynomial[i]! :=
-  evaluatePolynomialInEvaluationFormAux_fastPath polynomial _ z i h
+    evaluatePolynomialInEvaluationForm polynomial z = .ok polynomial[i]! := by
+  rw [evaluatePolynomialInEvaluationForm, if_neg (by simp [hsize])]
+  exact congrArg Except.ok
+    (evaluatePolynomialInEvaluationFormAux_fastPath polynomial _ z i h)
 
 
 -- Proofs about barycentricSumAux and evaluation outside of the fast path--
@@ -493,13 +503,16 @@ theorem evaluatePolynomialInEvaluationFormAux_slowPath
 at `z` follows the barycentric formula. -/
 theorem evaluatePolynomialInEvaluationForm_slowPath
     (polynomial : Polynomial) (z : Fr)
+    (hsize : polynomial.size = FIELD_ELEMENTS_PER_BLOB)
     (h : (rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB).idxOf? z = none) :
     evaluatePolynomialInEvaluationForm polynomial z =
-      barycentricRefSum polynomial (rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB)
+      .ok (barycentricRefSum polynomial (rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB)
         z polynomial.size *
       (z ^ (Fr.ofNat polynomial.size) - Fr.one) *
-      (Fr.ofNat polynomial.size).inverse :=
-  evaluatePolynomialInEvaluationFormAux_slowPath polynomial _ z h
+      (Fr.ofNat polynomial.size).inverse) := by
+  rw [evaluatePolynomialInEvaluationForm, if_neg (by simp [hsize])]
+  exact congrArg Except.ok
+    (evaluatePolynomialInEvaluationFormAux_slowPath polynomial _ z h)
 
 
 end EthCryptographySpecs.Kzg

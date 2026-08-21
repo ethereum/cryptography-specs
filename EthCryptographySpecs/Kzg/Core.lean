@@ -49,7 +49,7 @@ def bytesToKzgProof (b : Bytes48) : Except KzgError KZGProof :=
 def computeChallenge (blob : Blob) (commitment : KZGCommitment) : Fr :=
   let degreePoly := intToBytesBE FIELD_ELEMENTS_PER_BLOB 16
   let data := FIAT_SHAMIR_PROTOCOL_DOMAIN ++ degreePoly ++ blob ++ commitment
-  hashToBlsField data
+  Fr.hashToBlsField data
 
 /-- BLS multi-scalar multiplication in G1, on compressed-point inputs. -/
 def g1Lincomb
@@ -58,11 +58,23 @@ def g1Lincomb
     throw (.lincombLengthMismatch points.size scalars.size)
   if points.size = 0 then
     return Bls.G1.compress Bls.G1.zero
-  let pointsG1 := points.map (fun p => (Bls.G1.uncompress p).toOption.get!)
+  -- An undecodable 48-byte input must fail: the `Inhabited` default of
+  -- `G1` is the point at infinity, so it would silently drop out of the
+  -- multi-scalar multiplication.
+  let pointsG1 ← points.mapM fun p =>
+    match Bls.G1.uncompress p with
+    | .ok g    => pure g
+    | .error _ => throw KzgError.invalidG1Point
   return Bls.G1.compress (Bls.G1.msm pointsG1 scalars)
 
-/-- Given `y == p(z)`, compute `q(z)` for the KZG quotient polynomial,
-handling the special case where `z` is in the roots of unity. -/
+/-- Given `y == p(z)` for a polynomial `p(x)`, compute `q(z)`: the KZG
+quotient polynomial evaluated at `z` for the special case where `z` is in
+roots of unity.
+
+For more details, read
+https://dankradfeist.de/ethereum/2021/06/18/pcs-multiproofs.html section
+"Dividing when one of the points is zero". The code below computes q(x_m)
+for the roots of unity special case. -/
 private def computeQuotientEvalWithinDomain
     (z : Fr) (polynomial : Polynomial) (y : Fr)
     : Fr :=
@@ -74,6 +86,9 @@ private def computeQuotientEvalWithinDomain
     else
       let f_i := polynomial[i]! - y
       let numerator := f_i * omega_i
+      -- `z` is a root of unity here (the caller only reaches this function
+      -- when `z` is in the domain), so `z ≠ 0`; and `omega_i ≠ z` by the
+      -- skip above — the denominator is nonzero.
       let denominator := z * (z - omega_i)
       result + (numerator / denominator)
 
@@ -85,7 +100,7 @@ private def computeKzgProofImpl
   let domain := rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB
 
   -- For all x_i, compute p(x_i) - p(z).
-  let y := evaluatePolynomialInEvaluationForm polynomial z
+  let y ← evaluatePolynomialInEvaluationForm polynomial z
   let polynomialShifted := polynomial.map (· - y)
 
   -- For all x_i, compute (x_i - z).
@@ -175,7 +190,7 @@ private def verifyKzgProofBatch
         ++ blsFieldToBytes zs[i]!
         ++ blsFieldToBytes ys[i]!
         ++ proofs[i]!
-  let r := hashToBlsField data
+  let r := Fr.hashToBlsField data
   let rPowers := computePowers r commitments.size
 
   -- proof_lincomb = Σ_i r^i · proof_i
@@ -235,7 +250,7 @@ def verifyBlobKzgProof
   let commitment ← bytesToKzgCommitment commitmentBytes
   let polynomial ← blobToPolynomial blob
   let evaluationChallenge := computeChallenge blob commitment
-  let y := evaluatePolynomialInEvaluationForm polynomial evaluationChallenge
+  let y ← evaluatePolynomialInEvaluationForm polynomial evaluationChallenge
   let proof ← bytesToKzgProof proofBytes
   verifyKzgProofImpl commitment evaluationChallenge y proof
 
@@ -274,7 +289,7 @@ def verifyBlobKzgProofBatch
 
         let polynomial ← blobToPolynomial blob
         let challenge := computeChallenge blob commitment
-        let y := evaluatePolynomialInEvaluationForm polynomial challenge
+        let y ← evaluatePolynomialInEvaluationForm polynomial challenge
 
         pure (commitments.push commitment, challenges.push challenge,
               ys.push y, proofs.push proof)

@@ -144,14 +144,14 @@ statement in terms of an interpolated polynomial. -/
 theorem evaluatePolynomialInEvaluationForm_eq_interpolate
     (p : Polynomial) (z : Fr) (hsize : p.size = FIELD_ELEMENTS_PER_BLOB) :
     evaluatePolynomialInEvaluationForm p z
-      = Polynomial.eval z ((Lagrange.interpolate Finset.univ evalDomain)
-          fun i => p[i.val]!) := by
+      = .ok (Polynomial.eval z ((Lagrange.interpolate Finset.univ evalDomain)
+          fun i => p[i.val]!)) := by
   cases hidx : (rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB).idxOf? z with
   | some i =>
     -- Fast path: `z = D[i]`, and the interpolant evaluates to `p[i]`
     -- at its `i`-th node.
     obtain ⟨hi, hz⟩ := idxOf?_rootsOfUnityBrp_eq_some hidx
-    rw [evaluatePolynomialInEvaluationForm_fastPath p z i hidx]
+    rw [evaluatePolynomialInEvaluationForm_fastPath p z i hsize hidx]
     have hz' : evalDomain ⟨i, hi⟩ = z := by
       rw [evalDomain_eq_getElem!]; exact hz
     rw [← hz', Lagrange.eval_interpolate_at_node _
@@ -176,6 +176,7 @@ theorem evaluatePolynomialInEvaluationForm_eq_interpolate
       refine Finset.sum_congr rfl fun j _ => ?_
       rw [nodalWeight_evalDomain j, evalDomain_eq_getElem!]
       exact mul_shuffle _ _ _ _
+    refine congrArg Except.ok ?_
     calc (∑ i ∈ Finset.range FIELD_ELEMENTS_PER_BLOB,
             p[i]! * (rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB)[i]!
               * (z - (rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB)[i]!)⁻¹)
@@ -206,7 +207,7 @@ theorem evaluatePolynomialInEvaluationForm_eq_eval
     (hdeg : f.degree < FIELD_ELEMENTS_PER_BLOB)
     (hp : ∀ i, i < FIELD_ELEMENTS_PER_BLOB →
       p[i]! = f.eval (rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB)[i]!) :
-    evaluatePolynomialInEvaluationForm p z = f.eval z := by
+    evaluatePolynomialInEvaluationForm p z = .ok (f.eval z) := by
   rw [evaluatePolynomialInEvaluationForm_eq_interpolate p z hsize]
   have hf : f = (Lagrange.interpolate Finset.univ evalDomain)
       fun i => p[i.val]! := by

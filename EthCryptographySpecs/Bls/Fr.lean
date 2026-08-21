@@ -1,4 +1,5 @@
 import EthCryptographySpecs.Bls.Errors
+import EthCryptographySpecs.Bls.Sha256
 
 /-!
 # `Fr`
@@ -58,13 +59,20 @@ def powNat (base : Fr) (e : Nat) : Fr :=
 termination_by e
 decreasing_by omega
 
-/-- Multiplicative inverse via Fermat's little theorem. -/
+/-- Multiplicative inverse via Fermat's little theorem: computes
+`a^(modulus - 2)`, hence **`(0 : Fr).inverse = 0`** rather than an
+error. Call sites must therefore ensure the argument is nonzero, or
+document why it is. -/
 @[inline] def inverse (a : Fr) : Fr := powNat a (modulus - 2)
 
-/-- Field division `a * b⁻¹`. Registered with high priority because core
-already has a `Div (Fin n)` instance that performs *`Nat` division* of
-the underlying values — silently picking that one up would be wrong for
-a field element, so this instance must shadow it. -/
+/-- Field division `a * b⁻¹`. Because `inverse` maps `0` to `0`,
+**every division by zero evaluates to `0` instead of failing**: `a / b`
+silently returns `0` when `b = 0`. Call sites must ensure the
+denominator is nonzero, or document why it is. Registered with high
+priority because core already has a `Div (Fin n)` instance that
+performs *`Nat` division* of the underlying values — silently picking
+that one up would be wrong for a field element, so this instance must
+shadow it. -/
 instance (priority := high) : Div Fr := ⟨fun a b => a * b.inverse⟩
 
 /-- `a ^ b` raises `a` to `b.val`, treating the exponent as an integer. -/
@@ -75,18 +83,29 @@ def fromBytesBEAux (acc : Nat) : List UInt8 → Nat
   | [] => acc
   | b :: rest => fromBytesBEAux ((acc <<< 8) ||| b.toNat) rest
 
+/-- Decode big-endian bytes as a `Nat`. The single byte→field decoder
+shared by `fromBytesBE` and `hashToBlsField`. -/
+@[inline] def bytesBEToNat (b : ByteArray) : Nat :=
+  fromBytesBEAux 0 b.data.toList
+
 /-- Decode a 32-byte big-endian integer as an `Fr`. Throws if the input
 has the wrong size or the integer is `≥ r`. -/
 def fromBytesBE (b : ByteArray) : Except BlsError Fr :=
   if b.size ≠ 32 then .error .nonCanonicalFieldElement
   else
-    let acc := fromBytesBEAux 0 b.data.toList
+    let acc := bytesBEToNat b
     if h : acc < modulus then .ok ⟨acc, h⟩ else .error .nonCanonicalFieldElement
 
 /-- Encode as 32 big-endian bytes. -/
 def toBytesBE (a : Fr) : ByteArray :=
   ByteArray.mk <| Array.ofFn (n := 32) fun i =>
     UInt8.ofNat ((a.val >>> ((31 - i.val) * 8)) &&& 0xff)
+
+/-- Hash `data` and convert the output to a BLS scalar field element.
+The output is not uniform over the BLS field. -/
+def hashToBlsField (data : ByteArray) : Fr :=
+  let hashedData := sha256 data
+  Fr.ofNat (bytesBEToNat hashedData)
 
 end Fr
 

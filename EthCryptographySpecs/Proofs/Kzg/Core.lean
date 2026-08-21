@@ -59,7 +59,7 @@ theorem bytesToKzgProof_ok_iff {b : Bytes48} {p : KZGProof} :
 /-- The Fiat-Shamir challenge is a canonical field element. -/
 theorem val_computeChallenge_lt (blob : Blob) (commitment : KZGCommitment) :
     (computeChallenge blob commitment).val < Fr.modulus :=
-  val_hashToBlsField_lt _
+  Fr.val_hashToBlsField_lt _
 
 /-- `g1Lincomb` rejects mismatched input lengths. -/
 theorem g1Lincomb_length_mismatch {points : Array KZGCommitment}

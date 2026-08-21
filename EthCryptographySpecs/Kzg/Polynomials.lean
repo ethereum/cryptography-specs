@@ -37,9 +37,6 @@ abbrev Bytes48         := ByteArray
 
 /-! ## Bytes <-> field element helpers -/
 
-/-- SHA-256 over the input bytes. -/
-@[inline] def hash (data : ByteArray) : ByteArray := Bls.sha256 data
-
 /-- Encode `n` as `len` big-endian bytes. -/
 def intToBytesBE (n : Nat) (len : Nat) : ByteArray :=
   ByteArray.mk <| Array.ofFn (n := len) fun i =>
@@ -54,15 +51,9 @@ def bytesBEToNatAux (acc : Nat) : List UInt8 → Nat
 def bytesBEToNat (b : ByteArray) : Nat :=
   bytesBEToNatAux 0 b.data.toList
 
-/-- Hash `data` and reduce the SHA-256 output modulo the BLS modulus
-into an `Fr`. The output is not uniform over the field. -/
-def hashToBlsField (data : ByteArray) : Fr :=
-  let h := hash data
-  -- Reduce the 256-bit hash modulo BLS_MODULUS, then construct the field element.
-  Fr.ofNat (bytesBEToNat h)
-
-/-- Decode a 32-byte big-endian integer as an `Fr`. Throws if the input
-has the wrong size or the integer is `≥ BLS_MODULUS`. -/
+/-- Convert untrusted bytes to a trusted and validated BLS scalar field
+element. This function does not accept inputs greater than the BLS modulus.
+Throws if the input has the wrong size or the integer is `≥ BLS_MODULUS`. -/
 def bytesToBlsField (b : Bytes32) : Except KzgError Fr :=
   if b.size ≠ BYTES_PER_FIELD_ELEMENT then
     .error (.badFieldElementSize b.size)
@@ -88,7 +79,12 @@ def computeRootsOfUnity (order : Nat) : Array Fr :=
   let exponent := (BLS_MODULUS - 1) / order
   let root :=
     (Fr.ofNat PRIMITIVE_ROOT_OF_UNITY) ^ (Fr.ofNat exponent)
-  computePowers root order
+  let roots := computePowers root order
+  -- A non-divisor order would silently produce a domain that is not the
+  -- order-th roots of unity (and may contain duplicates). Note `x % 0 ≠ 0`,
+  -- so `order = 0` is caught too.
+  if (BLS_MODULUS - 1) % order == 0 then roots
+  else panicWith roots s!"computeRootsOfUnity: {order} does not divide BLS_MODULUS - 1"
 
 /-! ## Polynomials in coefficient form -/
 
@@ -99,10 +95,13 @@ def addPolynomialcoeff (a b : PolynomialCoeff) : PolynomialCoeff :=
     let bi := if i.val < b.size then b[i.val]! else Fr.zero
     a[i.val]! + bi
 
-/-- Multiply the coefficient-form polynomials `a` and `b`. -/
-def multiplyPolynomialcoeff (a b : PolynomialCoeff) : PolynomialCoeff :=
-  -- Caller must ensure `len(a) + len(b) ≤ FIELD_ELEMENTS_PER_EXT_BLOB`.
-  (Array.range a.size).foldl (init := #[Fr.zero]) fun r power =>
+/-- Multiply the coefficient-form polynomials `a` and `b`. Throws if the
+product would exceed `FIELD_ELEMENTS_PER_EXT_BLOB` coefficients. -/
+def multiplyPolynomialcoeff (a b : PolynomialCoeff) :
+    Except KzgError PolynomialCoeff := do
+  if a.size + b.size > FIELD_ELEMENTS_PER_EXT_BLOB then
+    throw (.polynomialProductTooLong a.size b.size)
+  return (Array.range a.size).foldl (init := #[Fr.zero]) fun r power =>
     let coef := a[power]!
     let summand : PolynomialCoeff :=
       Array.replicate power Fr.zero ++ b.map (· * coef)
@@ -110,8 +109,19 @@ def multiplyPolynomialcoeff (a b : PolynomialCoeff) : PolynomialCoeff :=
 
 /-- Long polynomial division for two coefficient-form polynomials.
 Each step eliminates the current leading coefficient of `a` (at index
-`apos`, descending) and prepends the quotient coefficient to `o`. -/
-def dividePolynomialcoeff (a b : PolynomialCoeff) : PolynomialCoeff :=
+`apos`, descending) and prepends the quotient coefficient to `o`.
+Throws on an empty divisor, and on a divisor with a zero leading
+coefficient whenever the division loop would run. -/
+def dividePolynomialcoeff (a b : PolynomialCoeff) :
+    Except KzgError PolynomialCoeff := do
+  -- An empty divisor is invalid.
+  if b.size = 0 then
+    throw .zeroDivisorPolynomial
+  -- A zero leading coefficient would make every quotient step below a
+  -- division by zero, silently yielding 0 (see the `Div Fr` docstring)
+  -- instead of failing. Only reachable when the loop runs at least once.
+  if a.size ≥ b.size ∧ b[b.size - 1]!.isZero then
+    throw .zeroDivisorPolynomial
   let bpos := b.size - 1
   -- The divisor's leading coefficient is loop-invariant; precompute its
   -- inverse once instead of paying for a full Fermat exponentiation
@@ -128,25 +138,32 @@ def dividePolynomialcoeff (a b : PolynomialCoeff) : PolynomialCoeff :=
       let a := (Array.range b.size).foldl
         (fun a i => a.set! (diff + i) (a[diff + i]! - b[i]! * quot)) a
       (a, #[quot] ++ o)
-  o
+  return o
 
-/-- Lagrange interpolation in coefficient form. Leading coefficients
-may be zero. -/
+/-- Lagrange interpolation: Finds the lowest degree polynomial that takes
+the value `ys[i]` at `xs[i]` for all i. Outputs a coefficient form
+polynomial. Leading coefficients may be zero.
+
+The entries of `xs` must be pairwise distinct: the weights invert
+`xs[i] - xs[j]`, and `Fr` inversion silently maps 0 to 0. -/
 def interpolatePolynomialcoeff
-    (xs ys : Array Fr) : PolynomialCoeff :=
-  (Array.range xs.size).foldl (init := #[Fr.zero]) fun r i =>
-    let summand := (Array.range ys.size).foldl (init := #[ys[i]!])
+    (xs ys : Array Fr) : Except KzgError PolynomialCoeff := do
+  -- The interpolation nodes and values must come in equal numbers
+  if xs.size ≠ ys.size then
+    throw (.inputLengthMismatch "ys" xs.size ys.size)
+  (Array.range xs.size).foldlM (init := #[Fr.zero]) fun r i => do
+    let summand ← (Array.range ys.size).foldlM (init := #[ys[i]!])
       fun summand j =>
         if j ≠ i then
           let weightAdj := (xs[i]! - xs[j]!).inverse
           multiplyPolynomialcoeff summand #[(-weightAdj) * xs[j]!, weightAdj]
         else
-          summand
-    addPolynomialcoeff r summand
+          pure summand
+    return addPolynomialcoeff r summand
 
 /-- Compute the vanishing polynomial on `xs` (coefficient form). -/
-def vanishingPolynomialcoeff (xs : Array Fr) : PolynomialCoeff :=
-  xs.foldl (init := #[Fr.one]) fun p x =>
+def vanishingPolynomialcoeff (xs : Array Fr) : Except KzgError PolynomialCoeff :=
+  xs.foldlM (init := #[Fr.one]) fun p x =>
     multiplyPolynomialcoeff p #[-x, Fr.one]
 
 /-- Evaluate a coefficient-form polynomial at `z` using Horner's schema. -/
@@ -190,7 +207,9 @@ def rootsOfUnityBrp (size : Nat) : Array Fr :=
   bitReversalPermutation (computeRootsOfUnity size)
 
 /-- Barycentric sum `Σ_j p[i+j] * D[i+j] / (z - D[i+j])` over `count`
-terms, accumulated left-to-right onto `acc`. -/
+terms, accumulated left-to-right onto `acc`. The caller must ensure `z` is
+distinct from every visited `domain` entry — a zero denominator would
+silently contribute `0` (see the `Div Fr` docstring). -/
 def barycentricSumAux (polynomial domain : Array Fr) (z : Fr) :
     Fr → Nat → Nat → Fr
   | acc, _, 0 => acc
@@ -209,19 +228,24 @@ def evaluatePolynomialInEvaluationFormAux
   -- Fast path: z is in the domain.
   | some i => polynomial[i]!
   | none =>
-    -- Barycentric formula.
+    -- Barycentric formula. On this path `z ∉ domain`, and the domain (roots
+    -- of unity) has no duplicates, so every `z - domain[i]` inside the sum is
+    -- nonzero — otherwise the division would silently contribute 0.
     let acc := barycentricSumAux polynomial domain z Fr.zero 0 width
     let r := z ^ (Fr.ofNat width) - Fr.one
     acc * r * inverseWidth
 
 /-- Evaluate an evaluation-form polynomial at `z`. Indexes directly when
 `z` is in the domain; otherwise uses the barycentric formula
-`f(z) = (z^WIDTH − 1) / WIDTH · Σ_i (f(D[i]) · D[i]) / (z − D[i])`. -/
+`f(z) = (z^WIDTH − 1) / WIDTH · Σ_i (f(D[i]) · D[i]) / (z − D[i])`.
+Throws unless the polynomial has exactly `FIELD_ELEMENTS_PER_BLOB`
+elements. -/
 def evaluatePolynomialInEvaluationForm
-    (polynomial : Polynomial) (z : Fr) : Fr :=
-  -- Caller must pass `polynomial.size == FIELD_ELEMENTS_PER_BLOB`; the
-  -- public entry points enforce this, so we don't re-check here.
-  evaluatePolynomialInEvaluationFormAux polynomial
-    (rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB) z
+    (polynomial : Polynomial) (z : Fr) : Except KzgError Fr :=
+  if polynomial.size ≠ FIELD_ELEMENTS_PER_BLOB then
+    .error (.badPolynomialSize polynomial.size)
+  else
+    .ok (evaluatePolynomialInEvaluationFormAux polynomial
+      (rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB) z)
 
 end EthCryptographySpecs.Kzg

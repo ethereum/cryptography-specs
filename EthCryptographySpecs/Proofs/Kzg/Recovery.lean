@@ -23,25 +23,46 @@ private theorem size_foldl_of_size_step {α β : Type _} (xs : Array β)
   Array.foldl_induction (motive := fun _ acc => acc.size = init.size) rfl
     (fun i acc h => (hf acc xs[i]).trans h)
 
+/-- Split a successful `Except` bind into its two successful stages.
+Cases on the opaque first stage, so nothing forces evaluation of the
+(expensive) underlying computation. -/
+private theorem except_bind_eq_ok {ε α β : Type _} {x : Except ε α}
+    {f : α → Except ε β} {b : β}
+    (h : x >>= f = .ok b) : ∃ a, x = .ok a ∧ f a = .ok b := by
+  cases x with
+  | error e => exact absurd h (by simp [Bind.bind, Except.bind])
+  | ok a => exact ⟨a, rfl, by simpa [Bind.bind, Except.bind] using h⟩
+
 /-- The extended vanishing polynomial spans the full extended domain. -/
-@[simp] theorem size_constructVanishingPolynomial
-    (missingCellIndices : Array CellIndex) :
-    (constructVanishingPolynomial missingCellIndices).size
-      = FIELD_ELEMENTS_PER_EXT_BLOB := by
-  simp only [constructVanishingPolynomial]
+theorem size_constructVanishingPolynomial
+    {missingCellIndices : Array CellIndex} {p : PolynomialCoeff}
+    (h : constructVanishingPolynomial missingCellIndices = .ok p) :
+    p.size = FIELD_ELEMENTS_PER_EXT_BLOB := by
+  simp only [constructVanishingPolynomial,
+    bind, Except.bind, pure, Except.pure] at h
+  repeat' split at h
+  all_goals cases h
   rw [size_foldl_of_size_step]
   · simp
   · exact fun acc b => Array.size_setIfInBounds
 
-/-- The recovered polynomial has exactly `FIELD_ELEMENTS_PER_BLOB`
-coefficients, whatever the inputs. -/
-@[simp] theorem size_recoverPolynomialcoeff
-    (cellIndices : Array CellIndex) (cosetsEvals : Array CosetEvals) :
-    (recoverPolynomialcoeff cellIndices cosetsEvals).size
-      = FIELD_ELEMENTS_PER_BLOB := by
-  simp only [recoverPolynomialcoeff]
-  simp [FIELD_ELEMENTS_PER_EXT_BLOB]
-  omega
+set_option maxRecDepth 4096 in
+/-- On success, the recovered polynomial has exactly
+`FIELD_ELEMENTS_PER_BLOB` coefficients, whatever the inputs. -/
+theorem size_recoverPolynomialcoeff
+    {cellIndices : Array CellIndex} {cosetsEvals : Array CosetEvals}
+    {p : PolynomialCoeff}
+    (h : recoverPolynomialcoeff cellIndices cosetsEvals = .ok p) :
+    p.size = FIELD_ELEMENTS_PER_BLOB := by
+  rw [recoverPolynomialcoeff] at h
+  split at h
+  · exact absurd h (by simp [Bind.bind, Except.bind])
+  · obtain ⟨u, hu, h⟩ := except_bind_eq_ok h
+    obtain ⟨z, hz, h⟩ := except_bind_eq_ok h
+    simp only [pure, Except.pure, Except.ok.injEq] at h
+    subst h
+    simp [FIELD_ELEMENTS_PER_EXT_BLOB]
+    omega
 
 /-- `recoverCellsAndKzgProofs` rejects a cells array whose length does
 not match the indices array. -/

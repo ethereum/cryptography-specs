@@ -78,15 +78,16 @@ theorem evaluatePolynomialInEvaluationForm_slowPath_sum
     (p : Polynomial) (z : Fr) (hsize : p.size = FIELD_ELEMENTS_PER_BLOB)
     (h : (rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB).idxOf? z = none) :
     evaluatePolynomialInEvaluationForm p z =
-      (∑ i ∈ Finset.range FIELD_ELEMENTS_PER_BLOB,
+      .ok ((∑ i ∈ Finset.range FIELD_ELEMENTS_PER_BLOB,
           p[i]! * (rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB)[i]!
             * (z - (rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB)[i]!)⁻¹)
         * (z ^ FIELD_ELEMENTS_PER_BLOB - 1)
-        * ((FIELD_ELEMENTS_PER_BLOB : Nat) : Fr)⁻¹ := by
+        * ((FIELD_ELEMENTS_PER_BLOB : Nat) : Fr)⁻¹) := by
+  rw [evaluatePolynomialInEvaluationForm, if_neg (by simp [hsize])]
   have hw : p.size < Fr.modulus := by rw [hsize]; decide
   have := evaluatePolynomialInEvaluationFormAux_slowPath_sum p
     (rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB) z hw h
   rw [hsize] at this
-  exact this
+  exact congrArg Except.ok this
 
 end EthCryptographySpecs.Kzg

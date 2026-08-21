@@ -64,3 +64,18 @@ def runBls {α : Type} (act : Except BlsError α) : IO α :=
   | .error e => throw (IO.userError e.message)
 
 end EthCryptographySpecs.Bls
+
+namespace EthCryptographySpecs
+
+/-- `panic!` with an explicit fallback value: logically equal to `fallback`
+(so theorems about the surrounding definition are unaffected), but at
+runtime prints an error message — and aborts when the process runs with
+`LEAN_ABORT_ON_PANIC=1` — when reached. Used to transcribe spec-level
+runtime assertions into proof-covered pure code. -/
+@[inline] def panicWith {α : Type _} (fallback : α) (msg : String) : α :=
+  @panic α ⟨fallback⟩ msg
+
+@[simp] theorem panicWith_eq {α : Type _} (fallback : α) (msg : String) :
+    panicWith fallback msg = fallback := rfl
+
+end EthCryptographySpecs
