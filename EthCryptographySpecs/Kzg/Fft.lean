@@ -1,6 +1,5 @@
 import EthCryptographySpecs.Bls
 import EthCryptographySpecs.Kzg.Constants
-import EthCryptographySpecs.Kzg.BitReversal
 
 /-!
 # `Fft`
@@ -63,7 +62,7 @@ def fftField
   -- Only (non-empty) power-of-two input lengths are legal: `fftHalve`
   -- silently truncates an odd length reached during recursion instead of
   -- failing, and the empty input has no well-defined transform.
-  if BitReversal.isPowerOfTwo vals.size then out
+  if vals.size.isPowerOfTwo then out
   else panicWith out s!"fftField: input length {vals.size} is not a power of two"
 
 /-- Multiply successive elements of `vals` by successive powers of
