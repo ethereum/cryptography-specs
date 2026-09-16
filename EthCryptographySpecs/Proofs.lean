@@ -1,5 +1,6 @@
 import EthCryptographySpecs.Proofs.Bls
 import EthCryptographySpecs.Proofs.Kzg
+import EthCryptographySpecs.Proofs.Xmss
 
 /-!
 # `EthCryptographySpecs.Proofs`

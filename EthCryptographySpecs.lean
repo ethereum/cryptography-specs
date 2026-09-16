@@ -1,5 +1,6 @@
 import EthCryptographySpecs.Bls
 import EthCryptographySpecs.Kzg
+import EthCryptographySpecs.Xmss
 
 /-!
 # `EthCryptographySpecs`
