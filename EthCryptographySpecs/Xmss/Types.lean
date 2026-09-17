@@ -18,7 +18,7 @@ open EthCryptographySpecs.Xmss.Constants
 
 /-! ## Objects -/
 
-/-- A hash value of `n` bits.
+/-- A hash value.
 
 Chain values, Merkle nodes and leaves are all digests. -/
 abbrev Digest := Vector UInt8 DIGEST_LEN
@@ -28,29 +28,33 @@ abbrev Digest := Vector UInt8 DIGEST_LEN
 It is what keeps a chain step, a Merkle node and a leaf from sharing a hash. -/
 abbrev Tweak := Vector UInt8 TWEAK_LEN
 
-/-- The public parameter `P`, hashed into every call.
+/-- The public parameter, hashed into every call.
 
 It makes one key's hash functions independent of another's. -/
 abbrev PublicParam := Vector UInt8 PUBLIC_PARAM_LEN
 
-/-- The randomizer `rho`, ground by the signer until the encoding is valid.
+/-- The randomizer, ground by the signer until the encoding is valid.
 
 It is part of the signature. -/
 abbrev Randomness := Vector UInt8 RANDOMNESS_LEN
 
-/-- The message to sign: a 256-bit digest, not a document. -/
+/-- The message to sign: a digest, not a document. -/
 abbrev Message := Vector UInt8 MESSAGE_LEN
 
-/-- The master secret `S`, from which every other secret is derived. -/
+/-- The master secret from which every other secret is derived.
+
+It is the PRF key held in the secret key.
+
+Every initial chain value is expanded from it during signing. -/
 abbrev Seed := Vector UInt8 SEED_LEN
 
 /-- When a signature was made.
 
-Each epoch in a key's range carries one one-time key.
+Each epoch indexes one one-time key.
 
-Signing is stateless and takes the epoch explicitly.
+The caller must never sign two different messages at one epoch.
 
-Tracking which epochs are spent belongs to the caller. -/
+Signing is stateless, so tracking spent epochs belongs to the caller. -/
 abbrev Epoch := UInt32
 
 /-! ## Crossing to and from untyped bytes -/

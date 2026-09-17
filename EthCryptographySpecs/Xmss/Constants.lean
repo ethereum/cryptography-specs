@@ -8,60 +8,62 @@ namespace EthCryptographySpecs.Xmss.Constants
 
 /-! ## Hash and object sizes -/
 
-/-- `n`, the hash value and Merkle node length in bytes.
+/-- The hash value and Merkle node length in bytes.
 
-128 bits, following SLH-DSA at NIST level 1.
-
-Digests this short move the security argument into the random oracle model.
-
-That is the price of a signature under the minimum IPv6 MTU. -/
+128 bits, following SLH-DSA at NIST level 1. -/
 def DIGEST_LEN : Nat := 16
 
-/-- `l_p`, the public parameter length in bytes.
+/-- The public parameter length in bytes.
 
 Hashed into every call, which separates one key's hashes from another's. -/
 def PUBLIC_PARAM_LEN : Nat := 16
 
-/-- `l_t`, the tweak length in bytes.
+/-- The tweak length in bytes.
 
 The tweak separates call sites within one key.
 
 A chain step, a Merkle node and a leaf never share a hash input. -/
 def TWEAK_LEN : Nat := 16
 
-/-- `l_msg`, the message length in bytes.
+/-- The message length in bytes.
 
-XMSS signs a 256-bit digest, so the caller hashes the real message first. -/
+XMSS signs a digest, so the caller hashes the real message first.
+
+The caller's hash must be collision resistant.
+
+Two messages sharing a digest share a signature. -/
 def MESSAGE_LEN : Nat := 32
 
-/-- `l_rnd`, the randomizer length in bytes.
+/-- The randomizer length in bytes.
 
-The signer grinds this value until the message encodes into the code.
-
-192 bits rather than 128, so a repeat within one signature is negligible. -/
+The signer grinds this value until the message encodes into the code. -/
 def RANDOMNESS_LEN : Nat := 24
 
-/-- Length of the master secret `S` in bytes.
+/-- Length of the master secret in bytes.
 
-Every other secret the key holds is derived from it. -/
+It is the PRF key held in the secret key.
+
+Every initial chain value is expanded from it during signing. -/
 def SEED_LEN : Nat := 32
 
 /-! ## Winternitz one-time signature -/
 
-/-- `w`, the chunk size in bits.
+/-- The chunk size in bits.
 
-One encoding digit selects a position along a hash chain. -/
+One encoding digit selects a position along a hash chain.
+
+Hash chains have length `2^W`. -/
 def W : Nat := 3
 
-/-- `v`, the code length: the number of hash chains in one one-time key. -/
+/-- The code length: the number of hash chains in one one-time key. -/
 def V : Nat := 42
 
-/-- `2^w`, the number of values a hash chain takes.
+/-- The number of values a hash chain takes.
 
-Position `0` holds the secret key, position `2^w - 1` the public key. -/
+The first position holds the secret key, the last one the public key. -/
 def CHAIN_LENGTH : Nat := 2 ^ W
 
-/-- `T`, the sum a valid encoding's digits must hit.
+/-- The sum a valid encoding's digits must hit.
 
 Fixing the sum removes the checksum chains: the signer grinds instead.
 
@@ -77,21 +79,25 @@ Constant because the digit sum is fixed.
 That is what makes verification a fixed-size circuit. -/
 def NUM_CHAIN_HASHES : Nat := 99
 
-/-- `A_max`, the randomizer trials allowed per signature.
+/-- The randomizer trials allowed per signature.
 
-A trial succeeds with probability `alpha = 2^-14.85`, so `2^15` are expected.
+A trial succeeds with probability about `2^-14.85`, so `2^15` are expected.
 
-Exhausting all of them has probability below `2^-(2^17)`. -/
-def MAX_RANDOMIZER_TRIALS : Nat := 2 ^ 32
+Exhausting all of them has probability below `2^-256` for one signature.
+
+Each trial is a random-oracle query, so the cap enters the security bound.
+
+It is therefore kept as small as completeness allows. -/
+def MAX_RANDOMIZER_TRIALS : Nat := 2 ^ 23
 
 /-! ## Merkle tree -/
 
-/-- `h`, the Merkle tree height. -/
+/-- The Merkle tree height. -/
 def LOG_LIFETIME : Nat := 32
 
-/-- `L = 2^h`, the number of epochs one key covers.
+/-- The number of epochs one key covers.
 
-Each epoch is a one-time key.
+Each epoch indexes one one-time key.
 
 Signing two different messages at one epoch breaks the scheme. -/
 def LIFETIME : Nat := 2 ^ LOG_LIFETIME
@@ -109,14 +115,14 @@ def SIG_SIZE : Nat := WOTS_SIG_SIZE + LOG_LIFETIME * DIGEST_LEN
 
 /-! ## Identities the parameter set must satisfy -/
 
-/-- The encoding consumes `v*w = 126` of the digest's 128 bits.
+/-- The encoding consumes 126 of the digest's 128 bits.
 
 The signer grinds the two leftover bits to zero.
 
 That is what makes the digest decompose into digits with no slack term. -/
 theorem encoding_fills_digest : V * W + 2 = DIGEST_LEN * 8 := by decide
 
-/-- Each 64-bit digest half carries `v/2 = 21` digits in its low 63 bits.
+/-- Each 64-bit digest half carries 21 digits in its low 63 bits.
 
 Bit 63 is the padding bit ground to zero. -/
 theorem digits_fill_word : W * (V / 2) + 1 = 64 := by decide

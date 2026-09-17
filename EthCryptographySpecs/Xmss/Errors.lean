@@ -24,20 +24,12 @@ inductive XmssError where
   | invalidEpochRange (epochStart epochEnd : Epoch)
   /-- Signing was given an epoch the key does not cover. -/
   | epochOutOfRange (epoch epochStart epochEnd : Epoch)
-  /-- Signing exhausted every randomizer without landing in the code.
-
-  Under a random oracle this reports a broken hash, not bad luck. -/
+  /-- Signing exhausted every randomizer without landing in the code. -/
   | noAdmissibleEncoding (epoch : Epoch)
   /-- Public key bytes were not the public key length. -/
   | badPublicKeySize (actual : Nat)
   /-- Signature bytes were not the signature length. -/
   | badSignatureSize (actual : Nat)
-  /-- Message bytes were not the message length.
-
-  XMSS signs a 256-bit digest, so the caller hashes first. -/
-  | badMessageSize (actual : Nat)
-  /-- Seed bytes were not the seed length. -/
-  | badSeedSize (actual : Nat)
 
 /-- Human-readable description, used at the C-ABI boundary. -/
 def XmssError.message : XmssError → String
@@ -54,10 +46,6 @@ def XmssError.message : XmssError → String
       s!"bad public key size: {actual}, expected {PUB_KEY_SIZE}"
   | .badSignatureSize actual =>
       s!"bad signature size: {actual}, expected {SIG_SIZE}"
-  | .badMessageSize actual =>
-      s!"bad message size: {actual}, expected {MESSAGE_LEN}"
-  | .badSeedSize actual =>
-      s!"bad seed size: {actual}, expected {SEED_LEN}"
 
 /-- Run a fallible XMSS computation down to `IO`.
 

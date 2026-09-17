@@ -7,5 +7,5 @@ import EthCryptographySpecs.Xmss.Errors
 
 Reference implementation of XMSS.
 
-The hash-based replacement for BLS on a post-quantum Ethereum.
+The hash-based replacement for BLS on a post-quantum consensus layer for Ethereum.
 -/
