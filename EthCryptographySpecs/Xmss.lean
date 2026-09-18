@@ -1,6 +1,7 @@
 import EthCryptographySpecs.Xmss.Constants
 import EthCryptographySpecs.Xmss.Types
 import EthCryptographySpecs.Xmss.Errors
+import EthCryptographySpecs.Xmss.Blake2s
 
 /-!
 # `EthCryptographySpecs.Xmss`
