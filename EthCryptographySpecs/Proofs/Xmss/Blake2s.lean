@@ -66,6 +66,28 @@ theorem little32_wordBytes (word : UInt32) :
   -- The four disjoint eight-bit slices cover the complete 32-bit word.
   bv_decide
 
+/-- A word is recoverable from its little-endian bytes. -/
+theorem wordBytes_injective : Function.Injective Internal.wordBytes := by
+  intro a b hab
+  -- Read the four bytes off both sides.
+  have h0 := congrArg (fun v : Vector UInt8 4 => v[0]) hab
+  have h1 := congrArg (fun v : Vector UInt8 4 => v[1]) hab
+  have h2 := congrArg (fun v : Vector UInt8 4 => v[2]) hab
+  have h3 := congrArg (fun v : Vector UInt8 4 => v[3]) hab
+  simp [Internal.wordBytes] at h0 h1 h2 h3
+  -- Each byte equation becomes one base-256 digit equation.
+  have n0 := congrArg UInt8.toNat h0
+  have n1 := congrArg UInt8.toNat h1
+  have n2 := congrArg UInt8.toNat h2
+  have n3 := congrArg UInt8.toNat h3
+  simp [UInt32.toNat_toUInt8, UInt32.toNat_shiftRight] at n0 n1 n2 n3
+  refine UInt32.toNat_inj.mp ?_
+  simp only [Nat.shiftRight_eq_div_pow] at n0 n1 n2 n3
+  -- Four base-256 digits plus the 32-bit range leave one value.
+  have ha := a.toNat_lt
+  have hb := b.toNat_lt
+  omega
+
 /-- Every message schedule row contains each index from 0 through 15 once. -/
 theorem sigma_row_permutation (round : Fin 10) :
     (Internal.sigma[round.val]!).toList.Perm (List.range 16) := by
