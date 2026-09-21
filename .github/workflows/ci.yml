@@ -1,0 +1,63 @@
+# Build the specs and their proofs, and run the test-vector generators.
+#
+# Nothing else checks a change before it is merged.
+
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+# A new push to a pull request supersedes the run still in flight.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  lean:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      # Installs elan, fetches the mathlib cache, then builds both libraries.
+      - uses: leanprover/lean-action@50fcf42d2e460296f1a34b402e990d1b24f8b596 # v1.6.0
+        with:
+          # An unfinished proof only warns, so warnings have to be fatal.
+          build-args: "--wfail"
+
+          # Caching `.lake` is pointless: mathlib alone exceeds the 10 GB limit.
+          use-github-cache: false
+
+  python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      # Only for elan and the mathlib cache: the install below runs the build.
+      - uses: leanprover/lean-action@50fcf42d2e460296f1a34b402e990d1b24f8b596 # v1.6.0
+        with:
+          auto-config: false
+          use-github-cache: false
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+
+      - run: pip install -e '.[test]'
+
+      - run: pytest
+
+      # The suites rewrite the vectors that downstream implementations pin.
+      - name: Check the committed test vectors are up to date
+        run: |
+          git add --intent-to-add tests
+          git diff --exit-code -- tests
