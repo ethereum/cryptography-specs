@@ -1,4 +1,5 @@
 import EthCryptographySpecs.Proofs.Xmss.Types
+import EthCryptographySpecs.Proofs.Xmss.TweakHash
 import EthCryptographySpecs.Proofs.Xmss.Blake2s
 
 /-!
