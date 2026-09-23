@@ -2,7 +2,7 @@ import EthCryptographySpecs.Xmss.Blake2s
 import EthCryptographySpecs.Xmss.Types
 
 /-!
-# `Xmss.Tweak`
+# `Xmss.TweakHash`
 
 The tweakable hash every other definition here is built from.
 
@@ -46,19 +46,30 @@ inductive TweakType where
   | randomizer
   deriving DecidableEq, Repr
 
-/-- The byte each call site is assigned, leaving 5 to 9 unused. -/
+/-- The byte each tweak type is assigned. -/
 def TweakType.toByte : TweakType → UInt8
   | .prf        => 0
   | .chain      => 1
   | .leaf       => 2
   | .merkle     => 3
   | .encoding   => 4
-  | .parameter  => 10
-  | .filler     => 11
-  | .randomizer => 12
+  | .parameter  => 5
+  | .filler     => 6
+  | .randomizer => 7
 
 /-- Byte prefixed to every tweak, separating this protocol from another. -/
 def PROTOCOL_DOMAIN_SEP : UInt8 := 0
+
+/-! ## Chain positions -/
+
+/-- Where one chain step sits among all the chain steps of one epoch.
+
+Chain `i` step `k` takes position `CHAIN_LENGTH * i + k`.
+
+The argument types bound the domain, so no two steps of an epoch collide. -/
+def chainPosition (chain : Fin V) (step : Fin CHAIN_LENGTH) : UInt32 :=
+  -- One block of CHAIN_LENGTH positions per chain, the step indexing inside it.
+  UInt32.ofNat (CHAIN_LENGTH * chain.val + step.val)
 
 /-! ## The tweak -/
 
@@ -68,19 +79,19 @@ Both numbers are little-endian, and the reserved bytes are zero:
 
 ```text
 byte  0      protocol domain separator
-byte  1      call site
+byte  1      tweak type
 bytes 2-3    zero
 bytes 4-7    sub-position
 bytes 8-11   zero
 bytes 12-15  index
 ```
 
-What the numbers count, per call site:
+What the numbers count, per tweak type:
 
 ```text
                      sub-position       index
 secret derivation    chain number       epoch
-chain step           8 * chain + step   epoch
+chain step           chain position     epoch
 leaf                 0                  epoch
 Merkle parent        tree level         node number
 encoding             0                  epoch
