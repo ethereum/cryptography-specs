@@ -48,19 +48,9 @@ theorem sum_of_wotsEncode (h : wotsEncode pp msg rnd epoch = some x) :
     exact htarget
   · exact absurd h (by simp)
 
-/-! ## Incomparability
+/-! ## Digit sums -/
 
-Distinct codewords must each exceed the other somewhere.
-
-Chains only ever walk forward.
-
-So a signature for one codeword reaches another only if that one dominates it.
-
-A constant digit sum rules that out. -/
-
-/-- The digit sum the specification folds is the sum over indices.
-
-Stated so the codeword sum can be handled with ordinary sum lemmas. -/
+/-- The digit sum the specification folds is the sum over indices. -/
 theorem digitSum_eq_sum (x : Vector (Fin CHAIN_LENGTH) V) :
     x.foldl (fun sum d => sum + d.val) 0 = ∑ i : Fin V, (x[i] : Nat) := by
   -- A vector fold is a fold over its list.
@@ -78,6 +68,112 @@ theorem digitSum_eq_sum (x : Vector (Fin CHAIN_LENGTH) V) :
     rw [Vector.toList_ofFn, List.map_ofFn, List.sum_ofFn]
     rfl
   rw [h1, h2, h3]
+
+/-! ## Digits determine the digest
+
+The identity below is the one an aggregation circuit checks, one per half.
+
+It holds only once the spare bit is zero, which is what the grinding buys. -/
+
+/-- The low `k` base-`b` digits of a number reconstruct it modulo `b ^ k`. -/
+theorem sum_base_digits_eq_mod (b n : Nat) : ∀ k : Nat,
+    ∑ r ∈ Finset.range k, n / b ^ r % b * b ^ r = n % b ^ k := by
+  intro k
+  induction k with
+  | zero => simp [Nat.mod_one]
+  | succ k ih =>
+    -- One more digit is one more factor of the base in the modulus.
+    rw [Finset.sum_range_succ, ih, pow_succ, Nat.mod_mul]
+    ring
+
+/-- A number below `b ^ k` is the sum of its `k` low base-`b` digits. -/
+theorem eq_sum_base_digits {b n k : Nat} (hn : n < b ^ k) :
+    n = ∑ r ∈ Finset.range k, n / b ^ r % b * b ^ r := by
+  rw [sum_base_digits_eq_mod, Nat.mod_eq_of_lt hn]
+
+/-- Shifting a word down by `3 * r` divides it by `8 ^ r`. -/
+private theorem toNat_shiftRight_digit (w : UInt64) {r : Nat} (hr : r < 21) :
+    (w >>> (3 * UInt64.ofNat r)).toNat = w.toNat / 8 ^ r := by
+  rw [UInt64.toNat_shiftRight]
+  -- The shift amount is below 64, so neither the wrap nor the mod bites.
+  have h3 : (3 * UInt64.ofNat r).toNat = 3 * r := by
+    rw [show (3 : UInt64) = UInt64.ofNat 3 from rfl, ← UInt64.ofNat_mul,
+      UInt64.toNat_ofNat']
+    omega
+  rw [h3, Nat.mod_eq_of_lt (by omega), Nat.shiftRight_eq_div_pow,
+    show (2 : Nat) ^ (3 * r) = 8 ^ r by rw [pow_mul]; norm_num]
+
+/-- A word whose top bit is clear is below `2 ^ 63`. -/
+private theorem lt_two_pow_of_topBit_zero (w : UInt64)
+    (h : (w >>> 63 == 0) = true) : w.toNat < 2 ^ 63 := by
+  have hz : (w >>> 63).toNat = 0 := by simp_all
+  have h63 : UInt64.toNat 63 % 64 = 63 := by decide
+  rw [UInt64.toNat_shiftRight, h63, Nat.shiftRight_eq_div_pow] at hz
+  have hw := w.toNat_lt
+  omega
+
+/-- Digit `r` of a word is its base-eight digit at position `r`. -/
+theorem digit_val (w : UInt64) {r : Nat} (hr : r < 21) :
+    (Internal.digit w r : Nat) = w.toNat / 8 ^ r % CHAIN_LENGTH := by
+  show (w >>> (3 * UInt64.ofNat r)).toNat % CHAIN_LENGTH = _
+  rw [toNat_shiftRight_digit w hr]
+
+/-- An admissible half equals its digits weighted by powers of eight. -/
+theorem digestWord_eq_sum_digits {d : Digest} (hp : Internal.padded d = true)
+    (half : Fin 2) :
+    (Internal.digestWord d half).toNat =
+      ∑ r ∈ Finset.range (V / 2),
+        (Internal.digit (Internal.digestWord d half) r : Nat)
+          * CHAIN_LENGTH ^ r := by
+  obtain ⟨h0, h1⟩ := (Bool.and_eq_true _ _).mp hp
+  -- The spare bit being zero is what puts the half below 8 ^ 21.
+  have hlt : (Internal.digestWord d half).toNat < 8 ^ 21 := by
+    have h863 : (2 : Nat) ^ 63 = 8 ^ 21 := by
+      norm_num [show (63 : Nat) = 3 * 21 from rfl, pow_mul]
+    rw [← h863]
+    fin_cases half
+    · exact lt_two_pow_of_topBit_zero _ h0
+    · exact lt_two_pow_of_topBit_zero _ h1
+  rw [show V / 2 = 21 from rfl]
+  conv_lhs => rw [eq_sum_base_digits hlt]
+  -- Each summand is the same digit, read two ways.
+  refine Finset.sum_congr rfl fun r hr => ?_
+  rw [digit_val _ (Finset.mem_range.mp hr)]
+  rfl
+
+/-- A verifier walks exactly 99 chain steps on an accepted encoding. -/
+theorem chainSteps_of_wotsEncode {pp : PublicParam} {msg : Message}
+    {rnd : Randomness} {epoch : Epoch} {x : Vector (Fin CHAIN_LENGTH) V}
+    (h : wotsEncode pp msg rnd epoch = some x) :
+    ∑ i : Fin V, (CHAIN_LENGTH - 1 - (x[i] : Nat)) = NUM_CHAIN_HASHES := by
+  have hsum : ∑ i : Fin V, (x[i] : Nat) = TARGET_SUM := by
+    rw [← digitSum_eq_sum]; exact sum_of_wotsEncode h
+  -- Steps walked plus steps revealed is the full chain, digit by digit.
+  have hpt : ∀ i : Fin V,
+      (CHAIN_LENGTH - 1 - (x[i] : Nat)) + (x[i] : Nat) = CHAIN_LENGTH - 1 := by
+    intro i
+    have hb := (x[i]).isLt
+    simp only [CHAIN_LENGTH, W] at hb ⊢
+    omega
+  have hfull : ∑ i : Fin V,
+      ((CHAIN_LENGTH - 1 - (x[i] : Nat)) + (x[i] : Nat))
+        = V * (CHAIN_LENGTH - 1) := by
+    rw [Finset.sum_congr rfl fun i _ => hpt i]
+    simp [Finset.sum_const, Finset.card_univ]
+  -- So the walked steps are what the target sum leaves.
+  rw [Finset.sum_add_distrib, hsum] at hfull
+  simp only [V, CHAIN_LENGTH, W, TARGET_SUM, NUM_CHAIN_HASHES] at hfull ⊢
+  omega
+
+/-! ## Incomparability
+
+Distinct codewords must each exceed the other somewhere.
+
+Chains only ever walk forward.
+
+So a signature for one codeword reaches another only if that one dominates it.
+
+A constant digit sum rules that out. -/
 
 /-- Pointwise domination with equal sums forces equality. -/
 theorem eq_of_le_of_sum_eq {x y : Vector (Fin CHAIN_LENGTH) V}
