@@ -1,7 +1,7 @@
-import EthCryptographySpecs.Xmss.Wots
+import EthCryptographySpecs.Xmss.Ots
 
 /-!
-# Proofs: `Xmss.Wots`
+# Proofs: `Xmss.Ots`
 
 Correctness of the one-time signature.
 -/
@@ -31,14 +31,14 @@ theorem chain_add :
     rfl
 
 /-- Recovery from an honest signature returns the honest public values. -/
-theorem wotsRecover_wotsSign (pp : PublicParam) (epoch : Epoch)
+theorem otsRecover_otsReveal (pp : PublicParam) (epoch : Epoch)
     (sk : Vector Digest V) (x : Vector (Fin CHAIN_LENGTH) V) :
-    wotsRecover pp epoch (wotsSign pp epoch sk x) x
-      = wotsPublicKey pp epoch sk := by
+    otsRecover pp epoch (otsReveal pp epoch sk x) x
+      = otsPublicKey pp epoch sk := by
   apply Vector.ext
   intro i hi
   have hb := (x[i]'hi).isLt
-  simp only [wotsRecover, wotsSign, wotsPublicKey, Vector.getElem_ofFn,
+  simp only [otsRecover, otsReveal, otsPublicKey, Vector.getElem_ofFn,
     Fin.getElem_fin]
   -- The signer walks to the digit, the verifier walks the rest of the way.
   have hsplit := chain_add (pp := pp) (epoch := epoch) (index := ⟨i, hi⟩)

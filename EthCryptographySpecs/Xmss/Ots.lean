@@ -1,9 +1,9 @@
 import EthCryptographySpecs.Xmss.TweakHash
 
 /-!
-# `Xmss.Wots`
+# `Xmss.Ots`
 
-The one-time signature: 42 hash chains, one per encoding digit.
+The WOTS+C one-time signature: 42 hash chains, one per encoding digit.
 
 Revealing a chain at height `k` lets anyone reach the heights above `k`.
 
@@ -37,26 +37,29 @@ def chain (pp : PublicParam) (epoch : Epoch) (index : Fin V)
 /-! ## The one-time key -/
 
 /-- The public value of every chain, each walked to its last position. -/
-def wotsPublicKey (pp : PublicParam) (epoch : Epoch) (sk : Vector Digest V) :
+def otsPublicKey (pp : PublicParam) (epoch : Epoch) (sk : Vector Digest V) :
     Vector Digest V :=
   Vector.ofFn fun i => chain pp epoch i 0 (CHAIN_LENGTH - 1) sk[i]
 
-/-- Reveal each chain at the height its digit names. -/
-def wotsSign (pp : PublicParam) (epoch : Epoch) (sk : Vector Digest V)
+/-- Reveal each chain at the height its digit names.
+
+Takes the digits, not the message.
+
+Signing a message first encodes it, then reveals at those digits. -/
+def otsReveal (pp : PublicParam) (epoch : Epoch) (sk : Vector Digest V)
     (x : Vector (Fin CHAIN_LENGTH) V) : Vector Digest V :=
   Vector.ofFn fun i => chain pp epoch i 0 (x[i] : Nat) sk[i]
 
 /-- Walk each revealed value the rest of the way to its public value. -/
-def wotsRecover (pp : PublicParam) (epoch : Epoch) (tips : Vector Digest V)
+def otsRecover (pp : PublicParam) (epoch : Epoch) (tips : Vector Digest V)
     (x : Vector (Fin CHAIN_LENGTH) V) : Vector Digest V :=
   Vector.ofFn fun i =>
     chain pp epoch i (x[i] : Nat) (CHAIN_LENGTH - 1 - (x[i] : Nat)) tips[i]
 
 /-- The Merkle leaf: the 42 public values hashed together. -/
-def wotsLeaf (pp : PublicParam) (epoch : Epoch) (pk : Vector Digest V) :
+def otsLeaf (pp : PublicParam) (epoch : Epoch) (pk : Vector Digest V) :
     Digest :=
-  -- - payload: V tips of DIGEST_LEN bytes = 42 * 16 = 672
-  -- - hash input: TWEAK_LEN + PUBLIC_PARAM_LEN + payload = 16 + 16 + 672 = 704
+  -- The payload is every public value, concatenated in chain order.
   tweakHash pp .leaf 0 epoch
     (pk.toList.foldl (fun acc d => acc ++ packBytes d) ByteArray.empty)
 
