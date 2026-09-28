@@ -81,6 +81,10 @@ def encodingPayload (msg : Message) (rnd : Randomness) : ByteArray :=
 
 /-- Encode a message into 42 chain digits under one randomizer.
 
+This is the WOTS+C encoding (https://eprint.iacr.org/2022/778).
+
+Grinding the randomizer to a fixed digit sum replaces the checksum chains.
+
 Returns nothing when the digest is inadmissible.
 
 Admissible means both spare bits are zero and the digits sum to 195.
