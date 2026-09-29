@@ -93,10 +93,10 @@ What the numbers count, per tweak type:
 secret derivation    chain number       epoch
 chain step           chain position     epoch
 leaf                 0                  epoch
-Merkle parent        tree level         node number
+Merkle parent        tree level         node index
 encoding             0                  epoch
 public parameter     0                  0
-filler node          tree level         node number
+filler node          tree level         node index
 randomizer           attempt number     epoch
 ```
 

@@ -5,26 +5,51 @@ import EthCryptographySpecs.Xmss.Ots
 
 The Merkle tree over the one-time keys, one leaf per epoch.
 
-Its root is half the public key, so one root stands for `2 ^ 32` one-time keys.
+A signature carries its leaf's co-path: the sibling of every node on the way up.
 
-A signature carries the 32 siblings that lead its leaf back to that root.
+```text
+level 2                 root
+                      /      \
+level 1          n_0            n_1
+                /   \          /   \
+level 0     l_0     l_1     l_2     l_3
+
+signed leaf l_2 (epoch 2)
+co-path     l_3 on level 0, then n_0 on level 1
+```
 -/
 
 namespace EthCryptographySpecs.Xmss
 
 open EthCryptographySpecs.Xmss.Constants
 
-/-! ## Nodes -/
+/-! ## Nodes
 
-/-- The parent of two nodes, hashed under its own place in the tree. -/
+A node sits at a level and a node index:
+
+- The level is the height above the leaves, so leaves are on level 0.
+- The node index counts the nodes of one level from the left, starting at 0.
+
+Node `j` on level `l + 1` has children `2j` and `2j + 1` on level `l`. -/
+
+/-- The parent of two nodes, hashed under its own place in the tree.
+
+# Arguments
+
+- `level`: the parent's level, at least 1.
+- `index`: the parent's node index on that level. -/
 def merkleNode (pp : PublicParam) (level index : Nat) (left right : Digest) :
     Digest :=
-  -- - payload: two children of DIGEST_LEN bytes = 2 * 16 = 32
-  -- - hash input: TWEAK_LEN + PUBLIC_PARAM_LEN + payload = 16 + 16 + 32 = 64
+  -- The payload is the left child, then the right child.
   tweakHash pp .merkle (UInt32.ofNat level) (UInt32.ofNat index)
     (packBytes left ++ packBytes right)
 
-/-- A node the key's epochs never reach, derived from the secret seed. -/
+/-- A node the key's epochs never reach, derived from the secret seed.
+
+# Arguments
+
+- `level`: the node's level.
+- `index`: the node's index on that level. -/
 def fillerNode (pp : PublicParam) (seed : Seed) (level index : Nat) : Digest :=
   -- Deriving it keeps the unsigned epochs hidden and costs no storage.
   tweakHash pp .filler (UInt32.ofNat level) (UInt32.ofNat index)
@@ -32,9 +57,11 @@ def fillerNode (pp : PublicParam) (seed : Seed) (level index : Nat) : Digest :=
 
 /-! ## The tree -/
 
-/-- A key signs at the epochs `epochStart` to `epochEnd`, and nowhere else. -/
-structure Tree where
-  /-- The call site every node of this tree is hashed under. -/
+/-- What fixes every node of a key's tree, once the leaves are given.
+
+A key signs at the epochs of its range, and nowhere else. -/
+structure TreeParams where
+  /-- The public parameter every node of this tree is hashed under. -/
   publicParam : PublicParam
   /-- The secret the filler nodes are derived from. -/
   seed : Seed
@@ -42,32 +69,36 @@ structure Tree where
   epochStart : Epoch
   /-- The last epoch the key signs at. -/
   epochEnd : Epoch
+  /-- The range holds at least one epoch. -/
+  epochStart_le_epochEnd : epochStart ≤ epochEnd
 
 /-- Whether the subtree at `index` on `level` holds an epoch of the key. -/
-def Tree.covers (t : Tree) (level index : Nat) : Bool :=
+def TreeParams.covers (tp : TreeParams) (level index : Nat) : Bool :=
   -- A node on `level` spans the epochs whose leading bits are `index`.
   --
   -- So shifting the two end epochs the same way brackets the nodes reached.
-  t.epochStart.toNat >>> level ≤ index && index ≤ t.epochEnd.toNat >>> level
+  tp.epochStart.toNat >>> level ≤ index
+    && index ≤ tp.epochEnd.toNat >>> level
 
-/-- The node at `index` on `level`, over the leaves `leaf`. -/
-def Tree.node (t : Tree) (leaf : Nat → Digest) (level index : Nat) : Digest :=
+/-- The node at `index` on `level`, over the given leaves. -/
+def TreeParams.node (tp : TreeParams) (leaves : Nat → Digest)
+    (level index : Nat) : Digest :=
   -- Testing the range first cuts an unused subtree off at its top.
   --
   -- A key covering `R` epochs reaches `O(R + 32)` nodes, never `2 ^ 32`.
-  if t.covers level index then
+  if tp.covers level index then
     match level with
     -- One leaf per epoch, and the epoch is the leaf's index.
-    | 0 => leaf index
+    | 0 => leaves index
     -- The two children of `index` on `level + 1` are `2 * index` and one more.
-    | l + 1 => merkleNode t.publicParam (l + 1) index
-        (t.node leaf l (2 * index)) (t.node leaf l (2 * index + 1))
+    | l + 1 => merkleNode tp.publicParam (l + 1) index
+        (tp.node leaves l (2 * index)) (tp.node leaves l (2 * index + 1))
   else
-    fillerNode t.publicParam t.seed level index
+    fillerNode tp.publicParam tp.seed level index
 
 /-- The root of the tree: half of the public key. -/
-def Tree.root (t : Tree) (leaf : Nat → Digest) : Digest :=
-  t.node leaf LOG_LIFETIME 0
+def TreeParams.root (tp : TreeParams) (leaves : Nat → Digest) : Digest :=
+  tp.node leaves LOG_LIFETIME 0
 
 /-! ## The authentication path -/
 
@@ -76,12 +107,12 @@ def siblingIndex (epoch level : Nat) : Nat :=
   -- Shifting names the path node, flipping its bottom bit names the sibling.
   (epoch >>> level) ^^^ 1
 
-/-- The 32 siblings a signature at `epoch` carries, from the leaf upward. -/
-def Tree.authPath (t : Tree) (leaf : Nat → Digest) (epoch : Epoch) :
-    Vector Digest LOG_LIFETIME :=
-  Vector.ofFn fun level => t.node leaf level (siblingIndex epoch.toNat level)
+/-- The co-path of the leaf at `epoch`, from the leaf upward. -/
+def TreeParams.authPath (tp : TreeParams) (leaves : Nat → Digest)
+    (epoch : Epoch) : Vector Digest LOG_LIFETIME :=
+  Vector.ofFn fun level => tp.node leaves level (siblingIndex epoch.toNat level)
 
-/-! ## Climbing back to the root -/
+/-! ## Computing the root from a path -/
 
 namespace Internal
 
@@ -107,7 +138,7 @@ def climbUpto (pp : PublicParam) (epoch : Nat)
 end Internal
 
 /-- The root an authentication path reaches from a leaf. -/
-def climb (pp : PublicParam) (epoch : Epoch)
+def computeRoot (pp : PublicParam) (epoch : Epoch)
     (path : Vector Digest LOG_LIFETIME) (leaf : Digest) : Digest :=
   Internal.climbUpto pp epoch.toNat path LOG_LIFETIME (Nat.le_refl _) leaf
 
