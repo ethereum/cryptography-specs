@@ -26,7 +26,7 @@ theorem verify_iff :
       ∃ x, wotsEncode pk.publicParam msg sig.randomness epoch = some x ∧
         computeRoot pk.publicParam epoch sig.merklePath
           (otsLeaf pk.publicParam epoch
-            (otsRecover pk.publicParam epoch sig.chainTips x))
+            (otsRecover pk.publicParam epoch sig.chainElements x))
           = pk.merkleRoot := by
   -- Split on the encoding: the rejecting branch has no witness to offer.
   cases h : wotsEncode pk.publicParam msg sig.randomness epoch <;>
@@ -50,7 +50,7 @@ private def examplePublicKey : PublicKey where
 
 /-- The signature that key makes at epoch 7. -/
 private def exampleSignature : Signature where
-  chainTips := #v[
+  chainElements := #v[
     #v[0xaf, 0x32, 0x87, 0xe4, 0x02, 0x9c, 0xd5, 0xea,
        0x56, 0x02, 0x52, 0x45, 0x18, 0x09, 0xdf, 0x7b],
     #v[0xa5, 0xbc, 0xd6, 0x98, 0x70, 0xcd, 0xcb, 0xd0,
