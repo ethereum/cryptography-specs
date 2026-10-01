@@ -6,6 +6,8 @@ import EthCryptographySpecs.Xmss.Encoding
 import EthCryptographySpecs.Xmss.Ots
 import EthCryptographySpecs.Xmss.Merkle
 import EthCryptographySpecs.Xmss.Verify
+import EthCryptographySpecs.Xmss.KeyGen
+import EthCryptographySpecs.Xmss.Sign
 import EthCryptographySpecs.Xmss.Blake2s
 
 /-!
