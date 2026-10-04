@@ -5,7 +5,7 @@ import EthCryptographySpecs.Xmss.KeyGen
 
 Signing.
 
-Signing is deterministic: same key, message and epoch, same signature.
+Signing is deterministic: same key, message and epoch => same signature.
 
 A key must never sign two different messages at one epoch.
 
@@ -18,16 +18,14 @@ open EthCryptographySpecs.Xmss.Constants
 
 /-! ## Grinding the randomizer -/
 
-/-- The randomizer of one attempt.
+/-- The randomizer of one attempt: the first 24 bytes of the tweakable hash.
 
 The seed is in the hash input, so the randomizer stays secret until signed. -/
 def randomizer (pp : PublicParam) (seed : Seed) (msg : Message) (epoch : Epoch)
     (trial : Nat) : Randomness :=
-  -- Same layout as every other hash: tweak, then parameter, then payload.
-  let input := packBytes (makeTweak .randomizer (UInt32.ofNat trial) epoch)
-    ++ packBytes pp ++ packBytes seed ++ packBytes msg
-  -- The randomizer keeps more of the digest than a node does.
-  (Blake2s.hash input).take RANDOMNESS_LEN
+  -- The attempt number sits where other call sites put a chain or level.
+  (tweakHashFull pp .randomizer (UInt32.ofNat trial) epoch
+    (packBytes seed ++ packBytes msg)).take RANDOMNESS_LEN
 
 namespace Internal
 
@@ -53,12 +51,20 @@ end Internal
 
 /-- Sign a message at an epoch of the key's range.
 
-Rejects an epoch outside the range, and a message no attempt encodes.
+# Warning
 
-The second has probability below `2^-256` per signature. -/
+Never sign two different messages at one epoch with one secret key.
+
+The two signatures reveal chains at two heights, which lets anyone forge.
+
+# Errors
+
+- The epoch is outside the key's range.
+- No attempt encodes the message, which happens with low probability. -/
 def sign (sk : SecretKey) (msg : Message) (epoch : Epoch) :
     Except XmssError Signature :=
-  let pp := sk.publicParam
+  let tree := sk.tree
+  let pp := tree.publicParam
   if epoch < sk.epochStart || sk.epochEnd < epoch then
     .error (.epochOutOfRange epoch sk.epochStart sk.epochEnd)
   else
@@ -72,6 +78,6 @@ def sign (sk : SecretKey) (msg : Message) (epoch : Epoch) :
         chainElements := otsReveal pp epoch (otsSecretKey pp sk.seed epoch) x
         randomness := rnd
         -- Step 3: the co-path of the epoch's leaf.
-        merklePath := sk.authPath sk.leaves epoch }
+        merklePath := tree.authPath sk.leaves epoch }
 
 end EthCryptographySpecs.Xmss

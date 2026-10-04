@@ -3,8 +3,6 @@ import EthCryptographySpecs.Proofs.Xmss.KeyGen
 
 /-!
 # Proofs: `Xmss.Sign`
-
-What signing returns.
 -/
 
 namespace EthCryptographySpecs.Xmss
@@ -99,7 +97,7 @@ theorem sign_eq_ok (h : sign sk msg epoch = .ok σ) :
         σ.chainElements =
           otsReveal sk.publicParam epoch
             (otsSecretKey sk.publicParam sk.seed epoch) x ∧
-        σ.merklePath = sk.authPath sk.leaves epoch := by
+        σ.merklePath = sk.tree.authPath sk.leaves epoch := by
   unfold sign at h
   split at h
   · exact absurd h (by simp)

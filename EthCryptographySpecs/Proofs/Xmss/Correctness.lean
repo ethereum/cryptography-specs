@@ -7,11 +7,13 @@ import EthCryptographySpecs.Proofs.Xmss.Sign
 
 A signature this specification produces is one it accepts.
 
-This is Lemma 3 of the construction paper (https://eprint.iacr.org/2025/055).
+# Assumption
 
-The paper also bounds how often signing fails.
+Every theorem here assumes that signing succeeded.
 
-That bound is probabilistic, so here signing is assumed to succeed.
+How often signing fails is not proven.
+
+Bounding it needs the random oracle model, or measurement.
 -/
 
 namespace EthCryptographySpecs.Xmss
@@ -31,7 +33,7 @@ theorem verify_sign {sk : SecretKey} {msg : Message} {epoch : Epoch}
   -- Step 2: walking the revealed chains on gives the honest public values.
   rw [hc, otsRecover_otsReveal, hp, ← leaves_toNat]
   -- Step 3: the honest leaf and its co-path lead to the honest root.
-  exact computeRoot_authPath sk sk.leaves epoch
+  exact computeRoot_authPath sk.tree sk.leaves epoch
     (UInt32.le_iff_toNat_le.mp h₁) (UInt32.le_iff_toNat_le.mp h₂)
 
 /-- Correctness: a generated key pair verifies every signature it makes. -/

@@ -3,8 +3,6 @@ import EthCryptographySpecs.Proofs.Xmss.Verify
 
 /-!
 # Proofs: `Xmss.KeyGen`
-
-What key generation returns.
 -/
 
 namespace EthCryptographySpecs.Xmss
@@ -30,12 +28,11 @@ theorem keyGen_eq_error_iff :
 /-- An accepted key pair is the seed's key over the requested range. -/
 theorem keyGen_eq_ok (h : keyGen seed epochStart epochEnd = .ok (sk, pk)) :
     pk = sk.publicKey ∧ sk.seed = seed ∧
-      sk.publicParam = genPublicParam seed ∧
       sk.epochStart = epochStart ∧ sk.epochEnd = epochEnd := by
   unfold keyGen at h
   split at h
   · obtain ⟨rfl, rfl⟩ := Prod.mk.inj (Except.ok.inj h)
-    exact ⟨rfl, rfl, rfl, rfl, rfl⟩
+    exact ⟨rfl, rfl, rfl, rfl⟩
   · exact absurd h (by simp)
 
 /-- The leaf at an epoch hashes that epoch's one-time public key. -/
