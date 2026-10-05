@@ -1,5 +1,6 @@
 import EthCryptographySpecs.Xmss.TweakHash
 import EthCryptographySpecs.Proofs.Xmss.Blake2s
+import EthCryptographySpecs.Proofs.Xmss.Types
 
 /-!
 # Proofs: `Xmss.TweakHash`
@@ -78,6 +79,41 @@ theorem makeTweak_chain_injective {c₁ c₂ : Fin V} {s₁ s₂ : Fin CHAIN_LEN
   obtain ⟨_, hpos, hep⟩ := makeTweak_injective h
   obtain ⟨hc, hs⟩ := chainPosition_injective hpos
   exact ⟨hc, hs, hep⟩
+
+/-! ## Hash inputs
+
+Every hash input opens with a 16-byte tweak, then a 16-byte parameter.
+
+Both widths are fixed, so an input splits into its pieces one way only. -/
+
+/-- Two concatenations whose first parts have one length split alike. -/
+theorem byteArray_append_inj {a b c d : ByteArray} (h : a ++ b = c ++ d)
+    (hs : a.size = c.size) : a = c ∧ b = d := by
+  -- Byte arrays are arrays of bytes, where the lemma already holds.
+  have hdata := congrArg ByteArray.data h
+  simp only [ByteArray.data_append] at hdata
+  obtain ⟨h₁, h₂⟩ := Array.append_inj hdata hs
+  exact ⟨ByteArray.ext h₁, ByteArray.ext h₂⟩
+
+/-- A hash input determines its call site, positions, parameter and payload.
+
+So two different queries never feed one hash. -/
+theorem tweakInput_injective {pp₁ pp₂ : PublicParam} {t₁ t₂ : TweakType}
+    {p₁ p₂ j₁ j₂ : UInt32} {x₁ x₂ : ByteArray}
+    (h : tweakInput pp₁ t₁ p₁ j₁ x₁ = tweakInput pp₂ t₂ p₂ j₂ x₂) :
+    t₁ = t₂ ∧ p₁ = p₂ ∧ j₁ = j₂ ∧ pp₁ = pp₂ ∧ x₁ = x₂ := by
+  -- Phase 1: the first 32 bytes are the tweak and the parameter.
+  obtain ⟨hHead, hx⟩ := byteArray_append_inj h (by simp)
+  -- Phase 2: the first 16 of those are the tweak.
+  obtain ⟨hTweak, hpp⟩ := byteArray_append_inj hHead (by simp)
+  obtain ⟨ht, hp, hj⟩ := makeTweak_injective (packBytes_injective hTweak)
+  exact ⟨ht, hp, hj, packBytes_injective hpp, hx⟩
+
+/-- Two call sites never share a hash input, whatever else they hash. -/
+theorem tweakInput_ne_of_type_ne {pp₁ pp₂ : PublicParam} {t₁ t₂ : TweakType}
+    {p₁ p₂ j₁ j₂ : UInt32} {x₁ x₂ : ByteArray} (h : t₁ ≠ t₂) :
+    tweakInput pp₁ t₁ p₁ j₁ x₁ ≠ tweakInput pp₂ t₂ p₂ j₂ x₂ :=
+  fun heq => h (tweakInput_injective heq).1
 
 /-! ## Byte layout
 

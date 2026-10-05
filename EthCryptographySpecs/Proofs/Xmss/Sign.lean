@@ -1,5 +1,6 @@
 import EthCryptographySpecs.Xmss.Sign
 import EthCryptographySpecs.Proofs.Xmss.KeyGen
+import EthCryptographySpecs.Proofs.Xmss.TweakHash
 
 /-!
 # Proofs: `Xmss.Sign`
@@ -61,6 +62,39 @@ theorem findRandomness_first :
       rcases Nat.eq_or_lt_of_le h₁' with rfl | hlt
       · exact hnone
       · exact hfirst t' (by omega) h₂'
+
+/-! ## Fresh randomizer queries
+
+The construction paper samples each randomizer at random.
+
+Here each attempt derives its randomizer from its own hash input instead.
+
+So every randomizer is a fresh oracle output, independent of the others. -/
+
+/-- Every attempt number fits the tweak's 32-bit field. -/
+theorem max_trials_lt_size : MAX_RANDOMIZER_TRIALS < 2 ^ 32 := by decide
+
+/-- Distinct attempts hash distinct inputs. -/
+theorem randomizerQuery_injective {t₁ t₂ : Nat}
+    (h₁ : t₁ < 2 ^ 32) (h₂ : t₂ < 2 ^ 32)
+    (h : tweakInput pp .randomizer (UInt32.ofNat t₁) epoch
+        (packBytes seed ++ packBytes msg)
+      = tweakInput pp .randomizer (UInt32.ofNat t₂) epoch
+        (packBytes seed ++ packBytes msg)) :
+    t₁ = t₂ := by
+  -- The attempt number is the tweak's sub-position.
+  have hp := congrArg UInt32.toNat (tweakInput_injective h).2.1
+  -- Below `2^32` the conversion keeps the number whole.
+  simp only [UInt32.toNat_ofNat'] at hp
+  omega
+
+/-- A randomizer query is never an encoding query. -/
+theorem randomizerQuery_ne_encodingQuery {pp' : PublicParam} {p j : UInt32}
+    {payload payload' : ByteArray} {epoch' : Epoch} :
+    tweakInput pp .randomizer p j payload
+      ≠ tweakInput pp' .encoding 0 epoch' payload' :=
+  -- Distinct call sites, so distinct inputs.
+  tweakInput_ne_of_type_ne (by decide)
 
 /-! ## Signing -/
 

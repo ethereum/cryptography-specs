@@ -29,6 +29,13 @@ Nothing weaker is accepted, so a caller cannot slip a short buffer through. -/
   -- Reading back index `i` gives entry `i`, which rebuilds the object.
   simp [packBytes]
 
+/-- Two objects with the same bytes are the same object. -/
+theorem packBytes_injective {n : Nat} :
+    Function.Injective (packBytes (n := n)) := by
+  -- Reading the bytes back recovers each object.
+  intro v w h
+  simpa using congrArg (unpackBytes? n) h
+
 /-- Reading a full-length buffer and writing it back returns it unchanged.
 
 So no buffer is unreachable, and no object has two encodings. -/
