@@ -113,15 +113,21 @@ def makeTweak (tweakType : TweakType) (subPosition index : UInt32) : Tweak :=
 
 /-! ## The tweakable hash -/
 
+/-- Hash a payload under one call site of one key, keeping the whole digest.
+
+Most callers keep a prefix: a digest, or a randomizer. -/
+def tweakHashFull (pp : PublicParam) (tweakType : TweakType)
+    (subPosition index : UInt32) (payload : ByteArray) : Vector UInt8 32 :=
+  -- Fixed-length prefixes, and BLAKE2s binds the length: this splits one way.
+  Blake2s.hash (packBytes (makeTweak tweakType subPosition index)
+    ++ packBytes pp ++ payload)
+
 /-- Hash a payload under one call site of one key.
 
 The result is the first half of a BLAKE2s-256 digest.
 -/
 def tweakHash (pp : PublicParam) (tweakType : TweakType)
     (subPosition index : UInt32) (payload : ByteArray) : Digest :=
-  -- Fixed-length prefixes, and BLAKE2s binds the length: this splits one way.
-  let input := packBytes (makeTweak tweakType subPosition index)
-    ++ packBytes pp ++ payload
-  (Blake2s.hash input).take DIGEST_LEN
+  (tweakHashFull pp tweakType subPosition index payload).take DIGEST_LEN
 
 end EthCryptographySpecs.Xmss

@@ -40,7 +40,7 @@ One honest signature, pinned byte for byte.
 It fixes every hash the verifier makes, not just its accept or reject. -/
 
 /-- The key derived from the seed `0, 1, ..., 31`, for epochs 6 to 8. -/
-private def examplePublicKey : PublicKey where
+def examplePublicKey : PublicKey where
   merkleRoot :=
     #v[0xec, 0x34, 0xb7, 0x1b, 0x2f, 0x93, 0x11, 0x10,
        0x6f, 0xc2, 0x37, 0xbb, 0xe4, 0xdb, 0x7d, 0x2b]
@@ -49,7 +49,7 @@ private def examplePublicKey : PublicKey where
        0x95, 0xbf, 0x4c, 0x74, 0xaa, 0xd6, 0xb6, 0xe3]
 
 /-- The signature that key makes at epoch 7. -/
-private def exampleSignature : Signature where
+def exampleSignature : Signature where
   chainElements := #v[
     #v[0xaf, 0x32, 0x87, 0xe4, 0x02, 0x9c, 0xd5, 0xea,
        0x56, 0x02, 0x52, 0x45, 0x18, 0x09, 0xdf, 0x7b],
@@ -205,7 +205,7 @@ private def exampleSignature : Signature where
        0xe7, 0xa9, 0x17, 0x1e, 0xeb, 0xcd, 0x08, 0xd9]]
 
 /-- The message signed: byte `i` is `i` XOR `0x5a`. -/
-private def exampleMessage : Message :=
+def exampleMessage : Message :=
   Vector.ofFn fun i => UInt8.ofNat i.val ^^^ 0x5a
 
 /-- The reference signature verifies. -/
