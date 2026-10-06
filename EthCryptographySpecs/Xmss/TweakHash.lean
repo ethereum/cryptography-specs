@@ -113,14 +113,18 @@ def makeTweak (tweakType : TweakType) (subPosition index : UInt32) : Tweak :=
 
 /-! ## The tweakable hash -/
 
+/-- The bytes one call hashes: tweak, then parameter, then payload. -/
+def tweakInput (pp : PublicParam) (tweakType : TweakType)
+    (subPosition index : UInt32) (payload : ByteArray) : ByteArray :=
+  -- Fixed-length prefixes, and BLAKE2s binds the length: this splits one way.
+  packBytes (makeTweak tweakType subPosition index) ++ packBytes pp ++ payload
+
 /-- Hash a payload under one call site of one key, keeping the whole digest.
 
 Most callers keep a prefix: a digest, or a randomizer. -/
 def tweakHashFull (pp : PublicParam) (tweakType : TweakType)
     (subPosition index : UInt32) (payload : ByteArray) : Vector UInt8 32 :=
-  -- Fixed-length prefixes, and BLAKE2s binds the length: this splits one way.
-  Blake2s.hash (packBytes (makeTweak tweakType subPosition index)
-    ++ packBytes pp ++ payload)
+  Blake2s.hash (tweakInput pp tweakType subPosition index payload)
 
 /-- Hash a payload under one call site of one key.
 

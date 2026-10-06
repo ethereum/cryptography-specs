@@ -1,4 +1,5 @@
 import EthCryptographySpecs.Xmss.Encoding
+import EthCryptographySpecs.Proofs.Xmss.TweakHash
 import Mathlib.Tactic
 
 /-!
@@ -214,6 +215,48 @@ theorem wotsEncode_incomparable
   · by_contra hno
     simp only [not_exists, Nat.not_lt] at hno
     exact hne (eq_of_le_of_sum_eq hno (hx.trans hy.symm))
+
+/-! ## Fresh queries
+
+Completeness treats every grinding attempt as a fresh oracle query.
+
+That needs two facts about the encoding query's hash input.
+
+- Distinct randomizers give distinct inputs.
+- Key generation never hashes an input of that shape. -/
+
+/-- The encoding payload determines the message and the randomizer. -/
+theorem encodingPayload_injective {msg₁ msg₂ : Message}
+    {rnd₁ rnd₂ : Randomness}
+    (h : encodingPayload msg₁ rnd₁ = encodingPayload msg₂ rnd₂) :
+    msg₁ = msg₂ ∧ rnd₁ = rnd₂ := by
+  --     payload:  [ message (32) | randomizer (24) | zeros (8) ]
+  obtain ⟨hHead, _⟩ := byteArray_append_inj h (by simp)
+  obtain ⟨hmsg, hrnd⟩ := byteArray_append_inj hHead (by simp)
+  exact ⟨packBytes_injective hmsg, packBytes_injective hrnd⟩
+
+/-- Distinct randomizers give distinct encoding queries. -/
+theorem encodingQuery_injective {rnd₁ rnd₂ : Randomness}
+    (h : tweakInput pp .encoding 0 epoch (encodingPayload msg rnd₁)
+      = tweakInput pp .encoding 0 epoch (encodingPayload msg rnd₂)) :
+    rnd₁ = rnd₂ :=
+  (encodingPayload_injective (tweakInput_injective h).2.2.2.2).2
+
+/-- Key generation never issues an encoding query.
+
+It hashes under six call sites, none of them the encoding's.
+
+They are the parameter, chain starts and steps, leaves, parents and fillers.
+-/
+theorem keyGen_query_ne_encoding_query {t : TweakType}
+    (ht : t ∈ [.parameter, .prf, .chain, .leaf, .merkle, .filler])
+    {pp' : PublicParam} {p j : UInt32} {payload : ByteArray} :
+    tweakInput pp' t p j payload
+      ≠ tweakInput pp .encoding 0 epoch (encodingPayload msg rnd) := by
+  -- None of the six call sites is the encoding's.
+  apply tweakInput_ne_of_type_ne
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at ht
+  rcases ht with rfl | rfl | rfl | rfl | rfl | rfl <;> decide
 
 /-! ## Known answer
 
