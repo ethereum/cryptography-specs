@@ -8,8 +8,7 @@ The code is every string of 42 digits, each from 0 to 7, summing to 195.
 Its size fixes how often one grinding attempt lands in the code.
 
 ```text
-|C| = 11539185377238682781344003244544752
-    = sum over b of (-1)^b * C(42, b) * C(195 - 8b + 41, 41)
+|C| = sum over b of (-1)^b * C(42, b) * C(195 - 8b + 41, 41)
 |C| / 2^128 >= 2^-15
 ```
 -/
@@ -17,6 +16,9 @@ Its size fixes how often one grinding attempt lands in the code.
 namespace EthCryptographySpecs.Xmss
 
 open EthCryptographySpecs.Xmss.Constants
+
+/-- The number of codewords. -/
+def CODE_SIZE : ℕ := 11539185377238682781344003244544752
 
 /-! ## Counting digit strings -/
 
@@ -141,7 +143,7 @@ theorem countRow_eq_card (k bound : ℕ) :
 /-- The number of codewords. -/
 theorem card_digitStrings_code :
     Fintype.card (DigitStrings V CHAIN_LENGTH TARGET_SUM)
-      = 11539185377238682781344003244544752 := by
+      = CODE_SIZE := by
   rw [← countRow_eq_card CHAIN_LENGTH TARGET_SUM V TARGET_SUM (le_refl _)]
   -- About 66,000 additions of large numbers, which the kernel evaluates.
   decide +kernel
@@ -153,7 +155,7 @@ theorem inclusion_exclusion_code :
     (∑ b ∈ Finset.range (TARGET_SUM / CHAIN_LENGTH + 1),
       (-1 : ℤ) ^ b * (Nat.choose V b : ℤ)
         * (Nat.choose (TARGET_SUM - CHAIN_LENGTH * b + V - 1) (V - 1) : ℤ))
-      = 11539185377238682781344003244544752 := by
+      = CODE_SIZE := by
   -- Pascal's recursion is exponential, falling factorials are linear.
   simp only [Nat.choose_eq_descFactorial_div_factorial]
   decide +kernel
@@ -161,7 +163,7 @@ theorem inclusion_exclusion_code :
 /-- Codewords as the specification stores them: vectors on target. -/
 theorem card_onTarget :
     Nat.card {x : Vector (Fin CHAIN_LENGTH) V // Internal.onTarget x = true}
-      = 11539185377238682781344003244544752 := by
+      = CODE_SIZE := by
   -- A vector is a function from positions to digits.
   let e : {x : Vector (Fin CHAIN_LENGTH) V // Internal.onTarget x = true}
       ≃ DigitStrings V CHAIN_LENGTH TARGET_SUM :=
@@ -183,7 +185,7 @@ theorem code_probability :
     (1 : ℚ) / 2 ^ 15
       ≤ (Fintype.card (DigitStrings V CHAIN_LENGTH TARGET_SUM) : ℚ)
         / 2 ^ 128 := by
-  rw [card_digitStrings_code]
+  rw [card_digitStrings_code, CODE_SIZE]
   norm_num
 
 end EthCryptographySpecs.Xmss
