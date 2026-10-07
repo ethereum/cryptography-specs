@@ -1,0 +1,7 @@
+input:
+  public_param: '0x5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a'
+  tweak_type: 4
+  sub_position: 3
+  index: 5
+  payload: '0x3333333333333333333333333333333333333333333333333333333333333333'
+output: '0xb0ea78c3885d06a623febdb07df08bc9'
