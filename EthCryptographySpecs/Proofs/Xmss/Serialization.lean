@@ -51,7 +51,6 @@ theorem encodePublicKey_eq (pk : PublicKey) :
     pure, Except.pure, DIGEST_LEN, PUBLIC_PARAM_LEN, packBytes]
   apply ByteArray.ext
   simp only [ByteArray.data_append]
-  rfl
 
 /-- A signature encodes as its chain values, then its randomizer, then its siblings. -/
 theorem encodeSignature_eq (sig : Signature) :
@@ -65,7 +64,6 @@ theorem encodeSignature_eq (sig : Signature) :
     packBytes]
   apply ByteArray.ext
   simp only [ByteArray.data_append]
-  rfl
 
 /-- A public key encodes to 32 bytes. -/
 @[simp] theorem size_encodePublicKey (pk : PublicKey) :

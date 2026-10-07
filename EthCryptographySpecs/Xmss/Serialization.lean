@@ -51,47 +51,19 @@ def signatureSszValue (sig : Signature) : Ssz.Value :=
   .seq [.bytes sig.chainElements.flatten.toArray, .bytes sig.randomness.toArray,
     .bytes sig.merklePath.flatten.toArray]
 
-private theorem publicKeySsz_encodes (pk : PublicKey) :
-    ∃ bytes, Ssz.serialize publicKeySsz (publicKeySszValue pk) = .ok bytes := by
-  -- Both fields have their declared lengths, so the codec cannot reject them.
-  refine ⟨pk.merkleRoot.toArray ++ pk.publicParam.toArray, ?_⟩
-  simp [publicKeySsz, publicKeySszValue, Ssz.serialize, Ssz.serializeStruct,
-    Ssz.serializeFields, Ssz.assemble, Ssz.Desc.isFixed, Ssz.Desc.fixedSize,
-    Ssz.headWidth, Ssz.bodyWidth, Ssz.headOf, Ssz.bodiesOf,
-    DIGEST_LEN, PUBLIC_PARAM_LEN, Ssz.bytesPerOffset, Bind.bind, Except.bind, pure, Except.pure]
-
-private theorem signatureSsz_encodes (sig : Signature) :
-    ∃ bytes, Ssz.serialize signatureSsz (signatureSszValue sig) = .ok bytes := by
-  -- All three fields have their declared lengths, and 1208 bytes is far below 2^32.
-  refine ⟨sig.chainElements.flatten.toArray ++
-    (sig.randomness.toArray ++ sig.merklePath.flatten.toArray), ?_⟩
-  simp [signatureSsz, signatureSszValue, Ssz.serialize, Ssz.serializeStruct,
-    Ssz.serializeFields, Ssz.assemble, Ssz.Desc.isFixed, Ssz.Desc.fixedSize,
-    Ssz.headWidth, Ssz.bodyWidth, Ssz.headOf, Ssz.bodiesOf,
-    V, LOG_LIFETIME, DIGEST_LEN, RANDOMNESS_LEN, Ssz.bytesPerOffset, Bind.bind, Except.bind, pure, Except.pure]
-
-/-- The bytes of a codec result proven to succeed.
-
-The proof rules out the error branch, so no fallback value or panic is needed.
--/
-private def encodedBytes (result : Except Ssz.Err Ssz.Bytes)
-    (success : ∃ bytes, result = .ok bytes) : ByteArray :=
-  match h : result with
-  | .ok bytes => ⟨bytes⟩
-  | .error _ => False.elim (by
-      -- The result is both an error and a success: a contradiction.
-      obtain ⟨bytes, wrote⟩ := success
-      simp at wrote)
-
 /-- Encode a public key as 32 bytes. -/
 def encodePublicKey (pk : PublicKey) : ByteArray :=
-  encodedBytes (Ssz.serialize publicKeySsz (publicKeySszValue pk))
-    (publicKeySsz_encodes pk)
+  match Ssz.serialize publicKeySsz (publicKeySszValue pk) with
+  | .ok bytes => ⟨bytes⟩
+  -- Unreachable: both fields have their declared lengths.
+  | .error _ => .empty
 
 /-- Encode a signature as 1208 bytes. -/
 def encodeSignature (sig : Signature) : ByteArray :=
-  encodedBytes (Ssz.serialize signatureSsz (signatureSszValue sig))
-    (signatureSsz_encodes sig)
+  match Ssz.serialize signatureSsz (signatureSszValue sig) with
+  | .ok bytes => ⟨bytes⟩
+  -- Unreachable: all three fields have their declared lengths.
+  | .error _ => .empty
 
 /-- Cut a byte field into consecutive 16-byte digests. -/
 def splitDigests {n : Nat} (bytes : Vector UInt8 (n * DIGEST_LEN)) : Vector Digest n :=
