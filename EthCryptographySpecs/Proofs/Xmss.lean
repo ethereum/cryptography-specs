@@ -5,6 +5,7 @@ import EthCryptographySpecs.Proofs.Xmss.CodeSize
 import EthCryptographySpecs.Proofs.Xmss.Ots
 import EthCryptographySpecs.Proofs.Xmss.Merkle
 import EthCryptographySpecs.Proofs.Xmss.Verify
+import EthCryptographySpecs.Proofs.Xmss.Serialization
 import EthCryptographySpecs.Proofs.Xmss.KeyGen
 import EthCryptographySpecs.Proofs.Xmss.Sign
 import EthCryptographySpecs.Proofs.Xmss.Correctness

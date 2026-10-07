@@ -23,6 +23,8 @@ from setuptools.command.build_ext import build_ext
 REPO_ROOT = Path(__file__).parent.resolve()
 BINDINGS  = REPO_ROOT / "bindings" / "python"
 LAKE_IR   = REPO_ROOT / ".lake" / "build" / "ir"
+# The shared SSZ package builds outside the root package's object directory.
+SSZ_IR    = REPO_ROOT / ".lake" / "packages" / "ssz" / "lean" / ".lake" / "build" / "ir"
 
 
 def _lean_sysroot() -> Path | None:
@@ -39,8 +41,17 @@ def _lean_sysroot() -> Path | None:
 
 
 def _collect_lean_objects() -> list[str]:
-    """Every `.c.o.export` Lake produced for the package."""
-    return sorted(glob(str(LAKE_IR / "**" / "*.c.o.export"), recursive=True))
+    """Collect compiled specification objects, including the shared SSZ codec."""
+    # Collect the specification modules without pulling regression executables into the extension.
+    objects = glob(str(LAKE_IR / "EthCryptographySpecs" / "**" / "*.c.o.export"), recursive=True)
+    # The top-level specification also has its own module initialization object.
+    objects.extend(glob(str(LAKE_IR / "EthCryptographySpecs.c.o.export")))
+    # Include the shared library's runtime modules from its pinned Lake subdirectory.
+    objects.extend(glob(str(SSZ_IR / "Ssz" / "**" / "*.c.o.export"), recursive=True))
+    # Its top-level initialization object must also be available to the dynamic linker.
+    objects.extend(glob(str(SSZ_IR / "Ssz.c.o.export")))
+    # Stable ordering makes the extension link reproducible across directory traversals.
+    return sorted(objects)
 
 
 def _lean_runtime_link(sysroot: Path) -> tuple[list[str], list[str], list[str]]:
