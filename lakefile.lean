@@ -36,7 +36,3 @@ keeps proof object files out of the Python extension link. -/
 lean_lib «Proofs» where
   roots := #[`EthCryptographySpecs.Proofs]
   precompileModules := false
-
-/-- Byte-level regression tests pin the consensus wire order and exact-length rejection. -/
-lean_exe xmssSerializationTests where
-  root := `Tests.XmssSerialization

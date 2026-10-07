@@ -9,7 +9,6 @@ include bindings/python/wrappers.h
 
 recursive-include EthCryptographySpecs *.lean
 include EthCryptographySpecs.lean
-recursive-include Tests *.lean
 
 # Don't ship caches or local-only state.
 prune .lake

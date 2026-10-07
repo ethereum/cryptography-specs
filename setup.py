@@ -41,16 +41,9 @@ def _lean_sysroot() -> Path | None:
 
 
 def _collect_lean_objects() -> list[str]:
-    """Collect compiled specification objects, including the shared SSZ codec."""
-    # Collect the specification modules without pulling regression executables into the extension.
-    objects = glob(str(LAKE_IR / "EthCryptographySpecs" / "**" / "*.c.o.export"), recursive=True)
-    # The top-level specification also has its own module initialization object.
-    objects.extend(glob(str(LAKE_IR / "EthCryptographySpecs.c.o.export")))
-    # Include the shared library's runtime modules from its pinned Lake subdirectory.
-    objects.extend(glob(str(SSZ_IR / "Ssz" / "**" / "*.c.o.export"), recursive=True))
-    # Its top-level initialization object must also be available to the dynamic linker.
-    objects.extend(glob(str(SSZ_IR / "Ssz.c.o.export")))
-    # Stable ordering makes the extension link reproducible across directory traversals.
+    """Every `.c.o.export` Lake produced for the package and the SSZ codec."""
+    objects = glob(str(LAKE_IR / "**" / "*.c.o.export"), recursive=True)
+    objects += glob(str(SSZ_IR / "**" / "*.c.o.export"), recursive=True)
     return sorted(objects)
 
 

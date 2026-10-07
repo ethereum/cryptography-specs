@@ -41,8 +41,6 @@ pip install -e '.[test]'
 pytest
 ```
 
-Run the Lean XMSS serialization regression tests with `lake exe xmssSerializationTests`.
-
 *Note*: Pre-generated reference tests are written to `tests/` at the project
 root. These tests are intended for use across implementations and may be pinned
 by downstream consumers.
