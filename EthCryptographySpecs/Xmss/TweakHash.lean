@@ -57,6 +57,18 @@ def TweakType.toByte : TweakType → UInt8
   | .filler     => 6
   | .randomizer => 7
 
+/-- The tweak type a byte names, if any. -/
+def TweakType.ofByte? : UInt8 → Option TweakType
+  | 0 => some .prf
+  | 1 => some .chain
+  | 2 => some .leaf
+  | 3 => some .merkle
+  | 4 => some .encoding
+  | 5 => some .parameter
+  | 6 => some .filler
+  | 7 => some .randomizer
+  | _ => none
+
 /-- Byte prefixed to every tweak, separating this protocol from another. -/
 def PROTOCOL_DOMAIN_SEP : UInt8 := 0
 

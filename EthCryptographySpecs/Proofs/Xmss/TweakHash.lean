@@ -20,6 +20,10 @@ theorem toByte_injective : Function.Injective TweakType.toByte := by
   intro a b h
   cases a <;> cases b <;> simp_all [TweakType.toByte]
 
+/-- Reading back a tweak type's byte returns that tweak type. -/
+@[simp] theorem ofByte?_toByte (t : TweakType) : TweakType.ofByte? t.toByte = some t := by
+  cases t <;> rfl
+
 /-- No two distinct call sites, sub-positions or indices share a tweak.
 
 Sharing one would put two call sites back into a single hash function. -/
