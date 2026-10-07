@@ -23,6 +23,8 @@ from setuptools.command.build_ext import build_ext
 REPO_ROOT = Path(__file__).parent.resolve()
 BINDINGS  = REPO_ROOT / "bindings" / "python"
 LAKE_IR   = REPO_ROOT / ".lake" / "build" / "ir"
+# The shared SSZ package builds outside the root package's object directory.
+SSZ_IR    = REPO_ROOT / ".lake" / "packages" / "ssz" / "lean" / ".lake" / "build" / "ir"
 
 
 def _lean_sysroot() -> Path | None:
@@ -39,8 +41,10 @@ def _lean_sysroot() -> Path | None:
 
 
 def _collect_lean_objects() -> list[str]:
-    """Every `.c.o.export` Lake produced for the package."""
-    return sorted(glob(str(LAKE_IR / "**" / "*.c.o.export"), recursive=True))
+    """Every `.c.o.export` Lake produced for the package and the SSZ codec."""
+    objects = glob(str(LAKE_IR / "**" / "*.c.o.export"), recursive=True)
+    objects += glob(str(SSZ_IR / "**" / "*.c.o.export"), recursive=True)
+    return sorted(objects)
 
 
 def _lean_runtime_link(sysroot: Path) -> tuple[list[str], list[str], list[str]]:

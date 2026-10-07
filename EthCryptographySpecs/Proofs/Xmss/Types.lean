@@ -51,4 +51,9 @@ theorem packBytes_unpackBytes? {n : Nat} {b : ByteArray} (hb : b.size = n) :
   refine congrArg some ?_
   exact congrArg ByteArray.mk Array.ofFn_getElem
 
+/-- Reading back the raw array of an object returns that object. -/
+@[simp] theorem unpackBytes?_toArray {n : Nat} (v : Vector UInt8 n) :
+    unpackBytes? n ⟨v.toArray⟩ = some v :=
+  unpackBytes?_packBytes v
+
 end EthCryptographySpecs.Xmss
