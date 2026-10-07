@@ -67,8 +67,8 @@ jobs:
           # Sanity check.
           CIBW_TEST_EXTRAS: test
           CIBW_TEST_COMMAND: >-
-            python -c "from eth_cryptography_specs import bls, kzg;
-            print(kzg.BYTES_PER_BLOB, bls.BYTES_PER_PUBKEY)"
+            python -c "from eth_cryptography_specs import bls, kzg, xmss;
+            print(kzg.BYTES_PER_BLOB, bls.BYTES_PER_PUBKEY, xmss.SIG_SIZE)"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

@@ -27,6 +27,16 @@ extern size_t FIELD_ELEMENTS_PER_CELL;
 extern size_t BYTES_PER_CELL;
 extern size_t CELLS_PER_EXT_BLOB;
 
+extern size_t XMSS_DIGEST_LEN;
+extern size_t XMSS_PUBLIC_PARAM_LEN;
+extern size_t XMSS_MESSAGE_LEN;
+extern size_t XMSS_RANDOMNESS_LEN;
+extern size_t XMSS_SEED_LEN;
+extern size_t XMSS_CODE_LENGTH;
+extern size_t XMSS_LOG_LIFETIME;
+extern size_t XMSS_PUB_KEY_SIZE;
+extern size_t XMSS_SIG_SIZE;
+
 /* ---- Lean ↔ C marshalling helpers ------------------------------------ */
 
 lean_object*
@@ -89,5 +99,12 @@ PyObject* py_compute_cells_and_kzg_proofs                 (PyObject* self, PyObj
 PyObject* py_compute_verify_cell_kzg_proof_batch_challenge(PyObject* self, PyObject* args);
 PyObject* py_verify_cell_kzg_proof_batch                  (PyObject* self, PyObject* args);
 PyObject* py_recover_cells_and_kzg_proofs                 (PyObject* self, PyObject* args);
+
+PyObject* py_xmss_key_gen                                 (PyObject* self, PyObject* args);
+PyObject* py_xmss_sign                                    (PyObject* self, PyObject* args);
+PyObject* py_xmss_verify                                  (PyObject* self, PyObject* args);
+PyObject* py_xmss_wots_encode                             (PyObject* self, PyObject* args);
+PyObject* py_xmss_tweak_hash                              (PyObject* self, PyObject* args);
+PyObject* py_xmss_blake2s                                 (PyObject* self, PyObject* args);
 
 #endif /* ETHCS_WRAPPERS_H */

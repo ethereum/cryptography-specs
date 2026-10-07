@@ -1,1 +1,1 @@
-__all__ = ["bls", "kzg"]
+__all__ = ["bls", "kzg", "xmss"]
