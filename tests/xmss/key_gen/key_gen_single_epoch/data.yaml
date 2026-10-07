@@ -1,0 +1,5 @@
+input:
+  seed: '0x000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f'
+  epoch_start: 7
+  epoch_end: 7
+output: '0xf492c3ac44d272c0f0a7991cadf19d34c487ed3aef7201c095bf4c74aad6b6e3'
