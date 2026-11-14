@@ -2,6 +2,7 @@ module
 
 public import EthLib.Serialization.Proofs.Ssz.RandomOracle
 public import EthLib.Serialization.Proofs.Ssz.Merkle.Branch
+public import EthLib.Serialization.Ssz.Typed.Basic
 
 /-!
 # Proofs: two branches of one root in the random oracle model
@@ -16,6 +17,8 @@ The experiment climbs both branches as the branch check does, with the oracle as
 
 Each win exposes two different queried inputs with one answer, so the birthday bound applies.
 
+The root of 48 bytes, the size of a commitment or a public key, is one call of the oracle.
+
 Source: Bellare and Rogaway, "Random Oracles are Practical", CCS 1993, section 2, "Oracles".
 
 <https://cseweb.ucsd.edu/~mihir/papers/ro.pdf>
@@ -27,7 +30,8 @@ namespace EthLib.Serialization.Ssz.RandomOracle
 
 open EthLib.Base
 open OracleComp OracleSpec ENNReal
-open EthLib.Cryptography.Merkle.RandomOracle (Collision experimentWith prEvent_experimentWith_le)
+open EthLib.Cryptography.Merkle.RandomOracle (Collision experimentWith experimentWith_queryBound
+  prEvent_experimentWith_le)
 
 /-- What the adversary outputs: one index, and two leaves with a branch each. -/
 structure BranchClaim where
@@ -178,6 +182,19 @@ private theorem climbBranchM_queryBound (index level : Nat) (node : Bytes) (bran
       (by simp [Nat.add_comm])
     simp [combineM, queryHash]
 
+/-- The extraction makes at most `2 * depth` oracle calls, one per climbed node.
+
+It climbs at most `depth` nodes of each branch. -/
+theorem extractBranches_queryBound (depth : Nat) (claim : BranchClaim) :
+    IsQueryBoundP (extractBranches queryHash depth claim) (fun _ => True) (2 * depth) := by
+  -- Each climb takes at most `depth` branch nodes, with one call per node.
+  have climbs : ∀ (leaf : Vector UInt8 32) (branch : List (Vector UInt8 32)),
+      IsQueryBoundP (climbBranchM queryHash claim.index 0 leaf.toArray
+        ((branch.take depth).map Vector.toArray)) (fun _ => True) depth := fun _ _ =>
+    (climbBranchM_queryBound _ _ _ _).mono (by simp)
+  exact (isQueryBoundP_bind (climbs _ _) fun _ _ =>
+    isQueryBoundP_bind (climbs _ _) fun _ _ => isQueryBoundP_pure _ _ 0).mono (by omega)
+
 /-- The experiment makes the adversary's oracle calls and at most one call per climbed node.
 
 The extraction climbs at most `depth` nodes of each branch. -/
@@ -185,16 +202,8 @@ theorem experimentWith_extractBranches_queryBound (depth : Nat)
     {adversary : OracleComp (unifSpec + HashOracle) BranchClaim} {q : Nat}
     (hq : IsQueryBoundP adversary (fun t => t.isRight = true) q) :
     IsQueryBoundP (experimentWith (extractBranches queryHash depth) adversary)
-      (fun t => t.isRight = true) (q + 2 * depth) := by
-  -- Each climb takes at most `depth` branch nodes, with one call per node.
-  have climbs : ∀ (index : Nat) (leaf : Vector UInt8 32) (branch : List (Vector UInt8 32)),
-      IsQueryBoundP (climbBranchM queryHash index 0 leaf.toArray
-        ((branch.take depth).map Vector.toArray)) (fun _ => True) depth := fun _ _ _ =>
-    (climbBranchM_queryBound _ _ _ _).mono (by simp)
-  refine isQueryBoundP_bind hq fun claim _ => IsQueryBoundP.liftComp_subSpec
-    (fun _ => iff_of_true trivial rfl) ?_
-  refine (isQueryBoundP_bind (climbs _ _ _) fun _ _ =>
-    isQueryBoundP_bind (climbs _ _ _) fun _ _ => isQueryBoundP_pure _ _ 0).mono (by omega)
+      (fun t => t.isRight = true) (q + 2 * depth) :=
+  experimentWith_queryBound hq (extractBranches_queryBound depth)
 
 /-- Two different leaves at one index with one root, at probability at most `Q^2 / N`.
 
@@ -276,5 +285,69 @@ theorem branchWins_sha256_iff {depth : Nat} {claim : BranchClaim} :
       exact firstClimbed
     · rw [List.take_of_length_le secondCount.le]
       exact secondClimbed
+
+/-- The 48 bytes of a vector and 16 zero bytes form its two packed nodes. -/
+private theorem packBytes_bytes48 (bytes : Vector UInt8 48) :
+    padded zeroChunk (Serialization.Ssz.packBytes bytes.toArray) 0 ++
+        padded zeroChunk (Serialization.Ssz.packBytes bytes.toArray) 1 =
+      bytes.toArray ++ Array.replicate 16 0 := by
+  have size : bytes.toArray.size = 48 := bytes.size_toArray
+  simp [padded, Serialization.Ssz.packBytes, size, bytesPerChunk, ← Array.append_assoc,
+    Array.extract_append_extract, Array.extract_eq_self_of_le]
+
+/-- A perfect tree of depth 1 over two nodes is one hash of the two nodes, with any hasher. -/
+private theorem subtreeAtM_two {m : Type → Type} [Monad m] [LawfulMonad m] (hasher : Hasher m)
+    {chunks : Array Bytes} (count : chunks.size = 2) :
+    subtreeAtM hasher chunks 1 0 =
+      combineM hasher.hash (padded zeroChunk chunks 0) (padded zeroChunk chunks 1) := by
+  simp only [subtreeAtM, count]
+  simp
+
+/-- The root of 48 bytes is one hash of those bytes and 16 zero bytes.
+
+It holds for a hasher in any lawful monad. -/
+theorem hashTreeRootM_bytes48 {m : Type → Type} [Monad m] [LawfulMonad m]
+    (hasher : Hasher m) (bytes : Vector UInt8 48) :
+    (hashTreeRootM hasher (SszType.desc (Vector UInt8 48)) (SszType.toValue bytes)).run = (do
+      return .ok (← hasher.hash ⟨bytes.toArray ++ Array.replicate 16 0⟩).data) := by
+  have size : bytes.toArray.size = 48 := bytes.size_toArray
+  have count : (Serialization.Ssz.packBytes bytes.toArray).size = 2 := by
+    simp [size, bytesPerChunk]
+  show (hashTreeRootAtM hasher 1 (.byteVector 48) (.bytes bytes.toArray)).run = _
+  simp only [hashTreeRootAtM, merkleLayout, size, bne_self_eq_false, Bool.false_eq_true,
+    ↓reduceIte, liftM_pure, pure_bind]
+  simp only [layoutChunksAtM, MerkleLayout.packing, Option.getD_none, Leaves.count,
+    Array.extract_size, pure_bind, bind_pure, merkleizeBoundedUncheckedM, Nat.lt_irrefl,
+    ↓reduceIte, ExceptT.run_lift]
+  rw [count, show depthFor 2 = 1 from depthFor_pow 1, subtreeAtM_two hasher count, combineM,
+    packBytes_bytes48]
+  simp only [map_bind, map_pure]
+
+/-- The root of 48 bytes makes one oracle call. -/
+theorem hashTreeRootM_bytes48_queryBound (bytes : Vector UInt8 48) :
+    IsQueryBoundP (hashTreeRootM (Hasher.ofHash queryHash) (SszType.desc (Vector UInt8 48))
+      (SszType.toValue bytes)).run (fun _ => True) 1 := by
+  rw [hashTreeRootM_bytes48]
+  simp [Hasher.ofHash, queryHash]
+
+/-- A replayed root of 48 bytes caches its message, and is the answer of the table to it.
+
+It needs the table to agree with the cache. -/
+theorem cached_of_hashTreeRootM_bytes48 {cache : HashOracle.QueryCache}
+    {f : QueryImpl HashOracle Id} (hf : cache.AgreesWithFn f) {bytes : Vector UInt8 48}
+    {root : Except Err Bytes}
+    (hrun : simulateQ cache.toPartialImpl (hashTreeRootM (Hasher.ofHash queryHash)
+      (SszType.desc (Vector UInt8 48)) (SszType.toValue bytes)).run = some root) :
+    cache ⟨bytes.toArray ++ Array.replicate 16 0⟩ =
+        some (f ⟨bytes.toArray ++ Array.replicate 16 0⟩) ∧
+      root = .ok (tableHash f ⟨bytes.toArray ++ Array.replicate 16 0⟩).data := by
+  have heval := cache.evalWithAnswerFn_eq_of_agreesWithFn hf _ hrun
+  rw [hashTreeRootM_bytes48] at hrun heval
+  simp only [Hasher.ofHash, evalWithAnswerFn_bind, evalWithAnswerFn_queryHash,
+    evalWithAnswerFn_pure] at heval
+  simp only [Hasher.ofHash, simulateQ_bind] at hrun
+  obtain ⟨_, hquery, -⟩ := Option.bind_eq_some_iff.mp hrun
+  obtain ⟨digest, hdigest⟩ := cached_of_queryHash hquery
+  exact ⟨by rw [hdigest, hf hdigest], heval.symm⟩
 
 end EthLib.Serialization.Ssz.RandomOracle

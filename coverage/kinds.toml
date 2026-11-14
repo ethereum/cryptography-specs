@@ -22,8 +22,8 @@ refinement = [
   # The direct accountable safety proof: the stake of registry keys against the stake model.
   "EthLib.Consensus.Proofs.DirectSafety.Identity",
   # The fork choice of the specification against the models of the fork choice and the network.
-  "EthLib.Consensus.Proofs.ForkChoice.FastConfirmationIndicators",
-  "EthLib.Consensus.Proofs.ForkChoice.FastConfirmationSets",
+  "EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Indicators",
+  "EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Sets",
   "EthLib.Consensus.Proofs.ForkChoice.Ghost",
   "EthLib.Consensus.Proofs.ForkChoice.HonestDuties",
   "EthLib.Consensus.Proofs.ForkChoice.Network",

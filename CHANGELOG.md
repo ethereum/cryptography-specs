@@ -9,6 +9,10 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the proof modules `FastConfirmationCommittees`, `FastConfirmationConfirmedRoot`, `FastConfirmationIndicators`, `FastConfirmationSets` and `FastConfirmationSupporters` move under `EthLib.Consensus.Proofs.ForkChoice.FastConfirmation` as `Committees`, `ConfirmedRoot`, `Indicators`, `Sets` and `Supporters` ([#2566](https://github.com/ethereum/EthLib/pull/2566)).
+  The declarations of the former `FastConfirmation` module move to `FastConfirmation.Basic`, and importing `FastConfirmation` still provides them and all five leaves.
+  Declaration namespaces and statements are unchanged.
+
 - `ssz.get_generalized_index` names a field of a container only by its name ([#2480](https://github.com/ethereum/EthLib/issues/2480)).
   A position given for a field is refused with the error for an unknown field.
   In addition, a path takes `__active_fields__` and `__selector__`, the mixed-in nodes of a progressive container and of a union.

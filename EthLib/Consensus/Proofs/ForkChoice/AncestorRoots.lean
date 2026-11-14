@@ -14,6 +14,7 @@ It is empty when the walk reaches a block whose slot is not above the slot of th
 
 - A successful walk is empty, or it lists the block after its older roots.
 - A walk that returns a root starts at a block with a higher slot than the terminal block.
+- Every root that a walk lists has a higher slot than the terminal block.
 - The roots of a walk after one of its roots are the walk from the block back to that root.
 
 The last fact splits a walk at one of its roots.
@@ -34,6 +35,42 @@ variable {preset : Preset} {fork : Fork}
 namespace Store
 
 variable {store : Store preset fork}
+
+/-- Each listed root has a slot strictly above the terminal block.
+
+This assumes the same of every root that the walk already held. -/
+theorem slot_lt_of_mem_getAncestorRoots {root terminal member : Root} {acc roots : List Root}
+    (walked : store.getAncestorRoots root terminal acc = .ok roots)
+    (accAbove : ∀ r ∈ acc, ∃ b t, store.block r = .ok b ∧ store.block terminal = .ok t ∧
+      t.slot < b.slot)
+    (mem : member ∈ roots) :
+    ∃ b t, store.block member = .ok b ∧ store.block terminal = .ok t ∧ t.slot < b.slot := by
+  fun_induction getAncestorRoots store root terminal acc generalizing roots with
+  | case1 => cases walked
+  | case2 root acc block found ih =>
+    rw [bind_ok_iff] at walked
+    obtain ⟨terminalBlock, terminalOk, walked⟩ := walked
+    split at walked
+    · cases Except.ok.inj walked
+      simp at mem
+    · rename_i higher
+      have allAbove : ∀ r ∈ root :: acc, ∃ b t, store.block r = .ok b ∧
+          store.block terminal = .ok t ∧ t.slot < b.slot := by
+        intro r member
+        rcases List.mem_cons.mp member with rfl | member
+        · exact ⟨block, terminalBlock, block_ok_iff.mpr found, terminalOk,
+            UInt64.not_le.mp higher⟩
+        · exact accAbove r member
+      dsimp only at walked
+      split at walked
+      · exact allAbove member (Except.ok.inj walked ▸ mem)
+      · split at walked
+        · cases walked
+        · rename_i parent parentFound
+          split at walked
+          · rename_i lower
+            exact ih parent parentFound lower walked allAbove mem
+          · cases walked
 
 /-- A successful walk back from a block is empty, or it lists the block after its older roots.
 

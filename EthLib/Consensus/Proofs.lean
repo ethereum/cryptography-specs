@@ -16,6 +16,7 @@ public import EthLib.Consensus.Proofs.BeaconApi.Events
 public import EthLib.Consensus.Proofs.BeaconApi.Identifiers
 public import EthLib.Consensus.Proofs.BeaconApi.LightClient
 public import EthLib.Consensus.Proofs.BeaconApi.LightClientBootstrap
+public import EthLib.Consensus.Proofs.BeaconApi.LightClientBootstrapReachable
 public import EthLib.Consensus.Proofs.BeaconApi.ObjectEvents
 public import EthLib.Consensus.Proofs.BeaconApi.Produce
 public import EthLib.Consensus.Proofs.BeaconApi.Publish
@@ -70,6 +71,7 @@ public import EthLib.Consensus.Proofs.Containers.Signing
 public import EthLib.Consensus.Proofs.Containers.State
 public import EthLib.Consensus.Proofs.Containers.SyncCommittee
 public import EthLib.Consensus.Proofs.DataAvailability.Blob
+public import EthLib.Consensus.Proofs.DataAvailability.BlobRandomOracle
 public import EthLib.Consensus.Proofs.DataAvailability.Column
 public import EthLib.Consensus.Proofs.DataAvailability.Custody
 public import EthLib.Consensus.Proofs.DepositTree
@@ -82,11 +84,6 @@ public import EthLib.Consensus.Proofs.ForkChoice.CheckpointBlocks
 public import EthLib.Consensus.Proofs.ForkChoice.Checkpoints
 public import EthLib.Consensus.Proofs.ForkChoice.CommitteeAgreement
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation
-public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmationCommittees
-public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmationConfirmedRoot
-public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmationIndicators
-public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmationSets
-public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmationSupporters
 public import EthLib.Consensus.Proofs.ForkChoice.ForwardClock
 public import EthLib.Consensus.Proofs.ForkChoice.Ghost
 public import EthLib.Consensus.Proofs.ForkChoice.Handlers
@@ -268,8 +265,10 @@ public import EthLib.Consensus.Proofs.Transition.Totality.RegistryLoadChain
 public import EthLib.Consensus.Proofs.Transition.Totality.RegistryLoadUpgrades
 public import EthLib.Consensus.Proofs.Transition.Totality.Rewards
 public import EthLib.Consensus.Proofs.Transition.Totality.RewardsBeforeAltair
+public import EthLib.Consensus.Proofs.Transition.Totality.Run
 public import EthLib.Consensus.Proofs.Transition.Totality.RunBounds
 public import EthLib.Consensus.Proofs.Transition.Totality.RunHypotheses
+public import EthLib.Consensus.Proofs.Transition.Totality.RunStep
 public import EthLib.Consensus.Proofs.Transition.Totality.RunUpgrades
 public import EthLib.Consensus.Proofs.Transition.Totality.Shape
 public import EthLib.Consensus.Proofs.Transition.Totality.Signers

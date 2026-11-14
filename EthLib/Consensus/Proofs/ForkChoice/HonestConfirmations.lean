@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmationConfirmedRoot
+public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.ConfirmedRoot
 public import EthLib.Consensus.Proofs.ForkChoice.HonestDuties
 
 /-!

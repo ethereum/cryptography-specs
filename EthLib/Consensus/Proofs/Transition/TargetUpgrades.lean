@@ -254,7 +254,7 @@ theorem processUpgrades_blockRoots {forked after : ForkedBeaconState preset}
 /-- An upgrade reaches Altair or a later fork.
 
 Before Altair, only a state of Phase 0 upgrades. -/
-private theorem upgradeNext_altair {pre : ForkedBeaconState preset}
+theorem upgradeNext_altair {pre : ForkedBeaconState preset}
     {post : {post : ForkedBeaconState preset // pre.fork < post.fork}}
     (computed : upgradeNext config checks pre = .ok post) :
     .altair ≤ post.val.fork ∧ (pre.fork < .altair → pre.fork = .phase0) := by

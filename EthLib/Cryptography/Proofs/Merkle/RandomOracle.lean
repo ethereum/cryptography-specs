@@ -109,6 +109,18 @@ def experimentWith {γ β : Type} (extraction : γ → OracleComp (D →ₒ R) �
   let claim ← adversary
   liftComp (extraction claim) (unifSpec + (D →ₒ R))
 
+omit [DecidableEq D] in
+/-- The experiment makes the adversary's oracle calls and those of the extraction.
+
+It needs the adversary to make at most `q` calls, and the extraction at most `n` on every claim. -/
+theorem experimentWith_queryBound {γ β : Type} {extraction : γ → OracleComp (D →ₒ R) β}
+    {adversary : OracleComp (unifSpec + (D →ₒ R)) γ} {q n : Nat}
+    (hq : IsQueryBoundP adversary (fun t => t.isRight = true) q)
+    (hn : ∀ claim, IsQueryBoundP (extraction claim) (fun _ => True) n) :
+    IsQueryBoundP (experimentWith extraction adversary) (fun t => t.isRight = true) (q + n) :=
+  isQueryBoundP_bind hq fun claim _ => IsQueryBoundP.liftComp_subSpec
+    (fun _ => iff_of_true trivial rfl) (hn claim)
+
 /-- A win of an experiment, at probability at most `q * (q / N)`.
 
 Each replay of the extraction that ends in a win must expose a collision of the cache.

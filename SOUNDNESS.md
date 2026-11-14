@@ -253,7 +253,33 @@ The climbs queried every message they hash, so the cache holds both, by `cached_
 Beyond the adversary's own queries, `Q` grows with the depth, not with the `2^depth` leaves.
 With SHA-256 in place of the oracle, `branchWins_sha256_iff` shows that a win is two different leaves that `isValidMerkleBranch` accepts at one depth, index and root.
 The specification hashes with SHA-256, and the step from SHA-256 to the oracle is the idealisation of A4, not a theorem.
-The light client, data availability and deposit proofs bind their branches with SHA-256, and no theorem composes them with this bound.
+
+`Consensus/Proofs/DataAvailability/BlobRandomOracle.lean` composes this bound with `verifyBlobSidecarInclusionProof`, the inclusion check of blob sidecars.
+The preset and the fork are fixed before the run, and an adversary outputs two blob sidecars.
+The extraction roots both commitments, reads the subtree index of the first blob index as the check does, and climbs both proofs.
+Every hash is an oracle call, and the climbs take the inclusion proof depth of the preset.
+The adversary wins when the sidecars have one index, one body root and different commitments, and both climbs reach that body root.
+Only the forks from Deneb and before Gloas put the commitments in the body.
+At the other forks the extraction reads no subtree index, so it climbs nothing and no adversary wins; no theorem states this.
+
+`collision_of_extractBlobSidecars` shows that every win leaves two different cached inputs with one answer.
+By `hashTreeRootM_bytes48` (`Serialization/Proofs/Ssz/BranchRandomOracle.lean`), the root of a commitment is one hash of its 48 bytes and 16 zero bytes.
+So equal roots of two different commitments are two such inputs.
+Two different roots that climb to one body root give the inputs that `collision_of_extractBranches` finds.
+`prEvent_experimentWith_le` then gives `prEvent_blobWins_le`, which bounds a win by `Q^2 / N`, and `prEvent_blobWins_le_two_pow` states it with `N = 2^256`.
+`extractBlobSidecars_queryBound` shows that the extraction makes one query per commitment root and at most `2 * depth` for the climbs.
+`experimentWith_extractBlobSidecars_queryBound` adds the adversary's queries, through `experimentWith_queryBound`, which the branch bound shares.
+`prEvent_blobWins_le_of_adversary` states the bound with `Q = q + 2 + 2 * depth`, for an adversary that makes at most `q` queries.
+At the mainnet depth of 17, `prEvent_blobWins_le_mainnet` bounds a win by `(q + 36)^2 / 2^256`.
+Beyond the adversary's own queries, `Q` grows with the depth only, not with the blobs or the body.
+With SHA-256 in place of the oracle, `blobWins_sha256_iff` shows that a win is two such sidecars that `verifyBlobSidecarInclusionProof` accepts.
+Carrying the bound over to SHA-256 is the idealisation of A4, not a theorem.
+
+These other branch checks also hash with SHA-256, and no theorem composes their proofs with the branch bound:
+
+- The light client checks of bootstraps and updates, from Altair, and of headers, from Capella.
+- `verifyKzgCommitmentsInclusionProof`, which data column sidecars and partial data column headers read at Fulu.
+- The deposit branch check of `processDeposit`, before Heze.
 
 ### leanSPHINCS
 
@@ -2697,7 +2723,7 @@ Both slots weigh validators by the same stake.
 For the rule that amount is the boost less the discount, so it does not cover a discount larger than the boost.
 No theorem yet takes these sets and stakes from the stores of an execution, or shows that the amount of the rule never grows.
 
-`stake_le_computeCommitteeWeightBetweenSlots` (`Consensus/Proofs/ForkChoice/FastConfirmationIndicators.lean`) shows that the weight covers the stake of the active members of the committees.
+`stake_le_computeCommitteeWeightBetweenSlots` (`Consensus/Proofs/ForkChoice/FastConfirmation/Indicators.lean`) shows that the weight covers the stake of the active members of the committees.
 `stake_le_computeCommitteeWeightBetweenSlots_of_covered` shows that the weight of a range with a whole epoch covers the stake of every validator active in the source of balances.
 `lt_two_mul_honest_support_of_isOneConfirmed` then gives Lemmas 4 and 3 of the paper for a block that the store confirms.
 Twice its honest support, plus the discount for empty slots, exceeds the committee weight since its parent plus the boost.
@@ -2706,7 +2732,7 @@ It assumes that the Byzantine validators hold at most the configured share of th
 That is Assumption 2 of the paper when `W` is the set of active members of the committees of the range.
 It also assumes that no validator the store knows to equivocate is honest.
 It also assumes that the effective balances of those validators are whole numbers of 100 Gwei, since the store rounds the weight down to 100 Gwei for its share of the adversary.
-`lt_two_mul_honest_supportersOf_of_isOneConfirmed` (`Consensus/Proofs/ForkChoice/FastConfirmationSets.lean`) builds the supporters, the equivocators and the committee members from the store, and their stakes are the store's numbers.
+`lt_two_mul_honest_supportersOf_of_isOneConfirmed` (`Consensus/Proofs/ForkChoice/FastConfirmation/Sets.lean`) builds the supporters, the equivocators and the committee members from the store, and their stakes are the store's numbers.
 It replaces that assumption with an invariant of the state: each effective balance of the source of balances is a whole number of increments.
 It also assumes that the increment of the preset is a whole number of 100 Gwei, as 10^9 Gwei is.
 No theorem yet derives that from the state transition.
@@ -2715,8 +2741,8 @@ It also assumes that each supporter of the block is a member of the committees o
 The store checks a vote against the committees in the state of its target, while the rule reads them in the state of the head.
 In a store with a forward clock, `Store.ForwardReachable.votesHaveOrigins` gives each latest vote the facts of its attestation.
 From those facts, `VoteOrigin.exists_mem_committee` (`Consensus/Proofs/ForkChoice/VoteOrigins.lean`) places the voter in a committee of the slot of its attestation, in the state of its target.
-`mem_getCommitteesBetweenSlots` (`Consensus/Proofs/ForkChoice/FastConfirmation.lean`) places each member of a committee of a slot of the range, in the state of the head, among the members that the rule reads.
-`Store.ForwardReachableWith.supportersOf_mem_committees` (`Consensus/Proofs/ForkChoice/FastConfirmationCommittees.lean`) proves the assumption for a range with part of an epoch, when the head descends from the block.
+`mem_getCommitteesBetweenSlots` (`Consensus/Proofs/ForkChoice/FastConfirmation/Basic.lean`) places each member of a committee of a slot of the range, in the state of the head, among the members that the rule reads.
+`Store.ForwardReachableWith.supportersOf_mem_committees` (`Consensus/Proofs/ForkChoice/FastConfirmation/Committees.lean`) proves the assumption for a range with part of an epoch, when the head descends from the block.
 It needs a store built with a forward clock and one setting of the signature checks, as on an honest node.
 Such a range ends at most one epoch after its start, so the vote of each supporter is at most one epoch after the block.
 `Store.ForwardReachable.slot_le_of_blockState_of_getCurrentSlot` (`Consensus/Proofs/ForkChoice/BlockStates.lean`) puts each block state of a store with a forward clock at or before the current slot.
@@ -2754,7 +2780,7 @@ In the model an honest validator signs a vote only after checking it against its
 Each of its votes in a sent message stays in its view, so no two of them can be slashed together.
 `Execution.lt_two_mul_honest_supportersOf_of_isOneConfirmed` restates `Store.lt_two_mul_honest_supportersOf_of_isOneConfirmed` for such a store, without that assumption.
 
-`Store.parentVotersOf` in `Consensus/Proofs/ForkChoice/FastConfirmationSets.lean` names the committee members whose recorded votes the discount for empty slots counts.
+`Store.parentVotersOf` in `Consensus/Proofs/ForkChoice/FastConfirmation/Sets.lean` names the committee members whose recorded votes the discount for empty slots counts.
 They are active and not slashed in the source of balances, are not known equivocators, and vote for the pending parent node or the parent payload node that the child builds on.
 `exists_stake_parentVotersOf_of_computeEmptySlotSupportDiscount` shows that the discount is their stake less the adversarial weight of the empty slots, with subtraction truncated at zero.
 If the parent sits at an earlier slot than the child, both counted nodes are ancestors of the pending child node, including from Gloas.
@@ -2764,7 +2790,7 @@ It assumes Assumption 2 on the active members of the empty-slot committees, no h
 In an execution of the network model, `Execution.equivocatingIndices_honest` gives the assumption on known equivocators for the store of an honest validator.
 These are store-local facts: no theorem here shows that a recorded honest vote is its voter's latest actual vote, or that it remains the recorded vote at a later store.
 
-`Consensus/Proofs/ForkChoice/FastConfirmationIndicators.lean` also states the two FFG tests of the rule on the target of the current epoch.
+`Consensus/Proofs/ForkChoice/FastConfirmation/Indicators.lean` also states the two FFG tests of the rule on the target of the current epoch.
 `getCurrentTarget_eq_ok_iff` states that target as the checkpoint of the store's epoch in the chain of the head, and `epoch_eq_of_getCurrentTarget` gives its epoch.
 `willCurrentTargetBeJustified_eq_ok_true_iff` states the two-thirds test, with both products checked for overflow.
 `two_mul_le_three_mul_of_willCurrentTargetBeJustified` states the bound it gives on naturals: three times the honest support reaches twice the total active balance.
@@ -2772,7 +2798,7 @@ These are store-local facts: no theorem here shows that a recorded honest vote i
 `willNoConflictingCheckpointBeJustified_of_willCurrentTargetBeJustified` shows that the one-third test passes wherever the two-thirds test does, for a nonzero effective balance increment.
 No theorem relates either test to the justification of the target in a later state.
 
-`Consensus/Proofs/ForkChoice/FastConfirmationConfirmedRoot.lean` states where the confirmed block of a slot comes from.
+`Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedRoot.lean` states where the confirmed block of a slot comes from.
 `Store.onFastConfirmation_confirmedRoot` shows that the rule starts from the block stored before, the finalized block or the observed justified block.
 It keeps the block stored before only when that block is in the chain of the head, and at the first slot of an epoch only when `isConfirmedChainSafe` accepts it.
 It takes the observed justified block only at the first slot of an epoch.
@@ -2783,14 +2809,26 @@ The rule makes two walks, and `Store.getAncestorRoots_of_append` in `Consensus/P
 No theorem yet shows that the roots of a walk are in the chain of the head.
 
 These theorems prove no safety: no theorem yet shows that a start is safe, or that a one-confirmed walk keeps a block in the chain of every honest head.
-They do not record every check of the rule.
+`Store.onFastConfirmation_confirmedRoot` and `Store.getLatestConfirmed_eq_or` do not record every check of the rule.
 For the start they leave out the other checks that compare the epochs and the slots of the blocks.
 For the walks they leave out the checks on the epochs of the start and of the walked blocks.
 They also leave out the check that the head of the slot before holds each block of the first walk.
 They leave out the checks that a voting source or an unrealized justification is recent.
-They also leave out the calls to `willNoConflictingCheckpointBeJustified` and `willCurrentTargetBeJustified`, whose tests `FastConfirmationIndicators.lean` states on their own.
+They also leave out the calls to `willNoConflictingCheckpointBeJustified` and `willCurrentTargetBeJustified`, whose tests `Consensus/Proofs/ForkChoice/FastConfirmation/Indicators.lean` states on their own.
 
-`Store.blockShouldBeFinalized_eq_ok_iff` (`Consensus/Proofs/ForkChoice/FastConfirmation.lean`) states when a block is due for finality.
+The same module also records every check on the start, and the tests that the stored root passes.
+`Store.SelectsStart` names the start of a call with every check that decides it.
+These are the three checks that keep the block stored before, and the four that replace it by the observed justified block.
+`Store.FastConfirmationChecked` names the checkpoint tests that a later root passes.
+They are a recent voting source or unrealized justification, the ancestry test on the head of the slot before, and the two target tests.
+It also records the bound that the start is at most one epoch behind the current epoch.
+`Store.onFastConfirmation_checked` states that a successful call stores its selected start, or a later one-confirmed root of its walk that passes those tests.
+It assumes only that the call succeeds.
+`Store.onFastConfirmation_checkpoints` (`Consensus/Proofs/ForkChoice/FastConfirmation/Basic.lean`) states how the same call sets the observed justified checkpoints at the epoch boundaries.
+These are tests that passed, not proofs that a checkpoint becomes justified or that a block stays in the chain of an honest head.
+No theorem here proves conditional or accountable safety of the confirmed block.
+
+`Store.blockShouldBeFinalized_eq_ok_iff` (`Consensus/Proofs/ForkChoice/FastConfirmation/Basic.lean`) states when a block is due for finality.
 The next checkpoint is at the first epoch that starts at or after the slot of the block.
 The block is due from the first slot two epochs after that one.
 `Store.getRestartResilientConfirmedRoot_eq_ok_iff` states the confirmed block after a restart, when both blocks are stored and the current slot is known.
@@ -3849,6 +3887,12 @@ A tag, and a hash in the object of EIP-1898, read back (`blockNumberOrTagOrHash_
 A number reads back when its text is no hash (`blockNumberOrTagOrHash_number`), which holds below `2^252` (`hash32_quantityJson_of_lt`).
 
 The request and the response objects of JSON-RPC 2.0 read back from their writers (`request_requestJson`, `response_responseJson`), a result of `null` included, and so does the identifier of a request (`requestId_requestIdJson`).
+An identifier reads exactly from a string, a number or `null` (`requestId_eq_ok_iff`, `Proofs/Rpc/Request.lean`).
+A JSON value reads as a request exactly when it is an object of this form (`request_eq_ok_iff`).
+Its only members are `jsonrpc`, `id`, `method` and `params`.
+Its `jsonrpc` is the string `2.0`, its `id` a string, a number or `null`, and its `method` a string.
+Its `params`, when present, is an array.
+By that theorem, the reader refuses a request without the version, with its parameters by name, or with an identifier of another type.
 The error codes of the source come in groups.
 Every code of a group that declares a range lies in that range (`code_mem_range`, `Proofs/Rpc/Errors.lean`).
 No code appears twice (`codes_nodup`), and the code `4444` of pruned history is in no group (`prunedHistoryUnavailable_not_mem`).
@@ -4031,6 +4075,17 @@ A request that names no fee takes no wei from its sender before its message (`pr
 Such a request, from a sender that holds its value, never fails with code 809 (`ethCall_ne_insufficientFunds`).
 Since it pays no fee, that is how EthLib meets the rule of the source.
 A sender that holds less than the value of its request gets no data (`ethCall_ne_ok_of_balance_lt_value`).
+A request makes a transaction exactly when it passes the checks of its kind (`exists_toTransaction_eq_ok_iff`).
+Its kind is at most 4, and a request of type 3 or 4 names a recipient.
+A gas price, a fee cap, a priority fee, an access list, blob hashes, a blob fee cap or authorizations appear only in the kinds that carry them.
+A chain that it names is that of the node.
+The nonce, the gas limit and the fee cap that the call gives are below `2^256`.
+So is each number of the request that the transaction carries.
+That transaction has the kind, value, recipient, data and lists of the request, and the nonce and gas limit that the call gives (`type_of_toTransaction_eq_ok` and the lemmas next to it).
+Its fee cap is the gas price of the request, or 0, up to type 1, and the cap that the call gives from type 2.
+Its price per gas is that gas price up to type 1.
+From type 2 it is the base fee plus the priority fee, cut to the fee cap above the base fee.
+From type 1 it names the chain of the node, and its signature is 0.
 
 The source leaves most of the call to the node, and `CallChoices` takes those choices as one input:
 
@@ -4337,7 +4392,8 @@ A path names a state, a block or a validator by an identifier (`Consensus/Beacon
 `isFinalizedRoot_of_slot_le` shows that a block of the chain of a head, at or below the finalized block of that chain, is reported finalized.
 `parseUInt64_print_of_some` shows that a slot or an index reads only from its plain decimal text, so a sign or a leading zero is refused.
 A state root names the state after the block whose `state_root` field it is.
-That rests on the store, which checks the field of each block that it imports and of its anchor; no theorem states it.
+That rests on the store, which checks the field of each block that it imports and of its anchor.
+`stateRoot_blockStates` and `stateRoot_resolveStateId_root` state it for a store that the handlers reach.
 The Python suite (`bindings/python/tests/consensus/test_beacon_api_identifiers.py`) checks the resolvers against a Capella fork choice vector of the minimal preset, not by a proof.
 The `execution_optimistic` flag reads the optimistic store; nothing exports or tests it.
 
@@ -4607,10 +4663,20 @@ The issue's single matching and validity theorems are split by fork; from Electr
 The light client answers are in `Consensus/BeaconApi/LightClient.lean`: the bootstrap of a block, the updates of a range of periods, and the latest finality and optimistic updates.
 `bootstrapFor_valid` (`Consensus/Proofs/BeaconApi/LightClientBootstrap.lean`) shows that a bootstrap the node serves for a block starts a light client that trusts that block.
 It assumes that the store holds the block under its root and the post state that the block names.
-These two facts are what the store checks when it takes a block, but no theorem on the fork choice proves them yet.
 It also assumes that the schedule puts the forks from Capella to Heze in order.
 It assumes a lawful state type and a preset whose sizes in the block and the state are nonzero.
 The answer itself refuses a block whose fork is not the fork that the schedule gives at its slot.
+
+`bootstrapFor_valid_of_reachable` (`Consensus/Proofs/BeaconApi/LightClientBootstrapReachable.lean`) shows the same for a store that the handlers reach from an anchor that the fork choice accepts, with no other assumption on the store.
+It keeps the assumptions on the schedule, the state type and the preset.
+Its proof reads `Store.Reachable.root`, which shows that each known block has its own root as its key.
+The proof also reads `stateRoot_blockStates`, which shows that the state kept under that root has the state root of the block.
+
+The handlers of `Store.Reachable` leave out `onInvalidPayload`, which runs when the execution layer finds a payload invalid.
+From Heze they also leave out `Store.recordValidatedInclusionListSatisfaction`, which records whether a payload that turns valid satisfies its inclusion lists.
+The first step removes a block only together with its state, and the second touches neither the blocks nor the states.
+So both keep the two facts that the proof reads.
+No theorem states that yet, so after either step only `bootstrapFor_valid` applies, with its assumptions on the store.
 
 `bootstrapFor_error` shows that each refusal of the bootstrap is the error with code 404 that names the root, and `bootstrapFor_error_code` gives the code.
 The file `apis/beacon/light_client/bootstrap.yaml` of release `v5.0.0-beta.0` lists that code when "`LightClientBootstrap` instance cannot be produced for the given block root".
@@ -5387,7 +5453,7 @@ Before Altair the rewards and penalties need `RewardsFitBeforeAltair`, a set of 
 They read the root of the block at the slot of each vote that matches the target.
 So they assume that each recent pending attestation is as inclusion in a block stored it (`PendingWellFormed`).
 Its slot is then in the epoch of its list, its inclusion delay is not zero, and its proposer is a validator of the registry.
-No theorem yet shows that this holds along a run: the preservation must be stated over the slot advance and block processing, and the nonzero delay needs a least inclusion delay of one slot, as mainnet and minimal have.
+Slots keep it (`PendingWellFormed.of_advanceSlot`), but no theorem yet shows that block processing does, and the nonzero delay needs a least inclusion delay of one slot, as mainnet and minimal have.
 The inactivity penalty before Altair multiplies an effective balance by the delay of finality, which is at most the current epoch.
 So the bound on the current epoch limits the length of the run that the theorem covers.
 A proposer can earn a share of the base reward of each signer that it included.
@@ -5444,6 +5510,29 @@ The "at least once" half is stated for a chain split at the epoch step, which fi
 The quorum is read on the state that the epoch transition reaches before its step of the payments.
 A bid whose payment a slashing cancels may still be paid by the late path of the bid, and then the run releases it once.
 
+`processSlotsAcross_exists_ok_of_run` (`Proofs/Transition/Totality/Run.lean`) puts these steps together: from a bounded state, every slot advance within a horizon succeeds.
+The advance applies no block, so the theorem covers a run of empty slots, with the upgrades on the way.
+The horizon is a number of epochs that the conditions of the run fix (`RunConditions`).
+It is at most the epochs in which the inactivity scores, which grow by the score bias, still fit with the largest cap (`Preset.horizon`).
+On mainnet, from scores of zero, that is 2251799 epochs, about 27 years, and the mainnet corollary uses `2.25 * 10^6`.
+The state at the start must keep the facts of a run (`RunHolds`).
+They are the invariant of the state transition, the shape of the state and the bounds of the start.
+They also include `JustifiedEarly`, and before Altair the facts that a block checked on each pending attestation.
+No theorem yet shows that block processing keeps `PendingWellFormed`, `PendingResolved` and the bounds, so the theorem says nothing about a chain with blocks.
+The run also takes three hypotheses on the states it reaches, which no bound gives.
+`SignersEarly`: in the first two epochs of the run, the signers of the previous epoch hold at most the active balance; a validator that signed and exits at the epoch boundary can break it, and from the third epoch no one has signed.
+`DrawsAtCap`: each draw of a sync committee, of the proposers and of a payload committee meets a validator at the cap of its fork, and the upgrade to Heze finds its two deposit indices equal.
+`EpochLimitBeforeAltair`: a run that starts before Altair ends by an epoch at which the inactivity penalty fits, at least `9 * 10^6` on mainnet.
+From Electra the run that the theorem covers is much shorter than the horizon, which only bounds the arithmetic.
+A run of empty slots finalizes nothing, so once finality is more than four epochs behind, every validator leaks.
+A validator stays at the cap of the draw only while its balance is at most 0.25 ETH below the cap.
+From a balance of 2048 ETH and a score of zero, the inactivity penalties alone take it below within 64 epochs of leak.
+Even a balance of 36 million ETH falls below within about `7.7 * 10^5` epochs.
+Before Electra the cap is 32 ETH, so a balance far above it can keep the effective balance at the cap past the horizon; from Electra the cap is 2048 ETH and the leak exhausts any balance within the supply bound.
+So from Electra the runs that meet `DrawsAtCap` are far shorter than the horizon, and the mainnet theorem says nothing for longer runs.
+`processSlotsAcross_exists_ok_emptyGenesisState` shows that the hypotheses can hold together, but only with an empty registry before Altair; no witness yet covers a run from Altair.
+Without a validator at the cap, whether a draw ends depends on the hashes; a theorem without `DrawsAtCap` would need a model of the hash, such as a random oracle.
+
 Whatever those hypotheses leave unproved is part of what a reader trusts.
 
 ### A3. Side channels
@@ -5494,6 +5583,7 @@ The binding of a proof of possession shares the bullet of leanXMSS, and the code
   The roots of the all-zero subtrees, constants of the specification, are oracle answers in the model.
   The type is fixed before the run, except in the layout bound, where the adversary picks both types.
   The branch bound fixes the depth before the run, and its adversary picks the index, the leaves and the branches.
+  The blob sidecar bound fixes the preset and the fork before the run, and its adversary picks both sidecars.
   Each new input receives 32 independent uniform bytes, repeated inputs receive the same answer, and the initial cache is empty.
   Only classical queries are counted, and the adversary's private sampling is not.
   The bound says nothing about an attack that uses the structure of SHA-256.
