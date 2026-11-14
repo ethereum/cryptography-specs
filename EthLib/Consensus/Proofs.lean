@@ -275,6 +275,7 @@ public import EthLib.Consensus.Proofs.Transition.Totality.RunFromAltair
 public import EthLib.Consensus.Proofs.Transition.Totality.RunStep
 public import EthLib.Consensus.Proofs.Transition.Totality.RunUpgrades
 public import EthLib.Consensus.Proofs.Transition.Totality.Shape
+public import EthLib.Consensus.Proofs.Transition.Totality.ShapeBlock
 public import EthLib.Consensus.Proofs.Transition.Totality.Signers
 public import EthLib.Consensus.Proofs.Transition.Totality.Slashings
 public import EthLib.Consensus.Proofs.Transition.Totality.Slot

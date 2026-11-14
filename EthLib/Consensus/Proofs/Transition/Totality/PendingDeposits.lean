@@ -132,6 +132,38 @@ private theorem applyPendingDeposit_exists_ok (config : Config) (checks : Signat
     simp only [liftAccessor, liftArith, converted, Except.mapError, bind, Except.bind, raised]
     exact ⟨_, rfl⟩
 
+/-- A new validator keeps one entry for each validator in the flags and the scores.
+
+From Altair, it appends one entry to each list, and before Altair there are no such lists. -/
+theorem addValidatorToRegistry_matches {state after : BeaconState preset fork}
+    {pubkey : Cryptography.Bls.BLSPubkey} {credentials : Bytes32} {amount : Gwei}
+    (computed : addValidatorToRegistry state pubkey credentials amount = .ok after)
+    (sized : ParticipationMatches state) (scored : InactivityScoresMatch state) :
+    ParticipationMatches after ∧ InactivityScoresMatch after := by
+  unfold addValidatorToRegistry at computed
+  split at computed
+  · rename_i altair
+    simp only [addValidatorToRegistryAltair, liftAccessor_ok, bind_ok_iff, pure, Except.pure,
+      Except.ok.injEq] at computed
+    obtain ⟨index, indexOk, _, validatorsOk, _, _, _, previousOk, _, currentOk, _, scoresOk,
+      rfl⟩ := computed
+    have atEnd := (getIndexForNewValidator_ok_iff.mp indexOk).2
+    have validators := setOrAppendRooted_size validatorsOk
+    have previous := setOrAppendList_size previousOk
+    have current := setOrAppendList_size currentOk
+    have scores := setOrAppendList_size scoresOk
+    have one := (sized altair).1
+    have two := (sized altair).2
+    have three := scored altair
+    refine ⟨fun _ => ⟨?_, ?_⟩, fun _ => ?_⟩ <;>
+      simp only at validators previous current scores ⊢ <;>
+      split at validators <;> split at previous <;> split at current <;>
+      split at scores <;> omega
+  · split at computed
+    · cases computed
+      exact ⟨fun altair => absurd altair ‹_›, fun altair => absurd altair ‹_›⟩
+    · cases computed
+
 /-- A pending deposit keeps one entry for each validator in the flags and the scores. -/
 private theorem applyPendingDeposit_matches {config : Config} {checks : SignatureChecks}
     {state after : BeaconState preset fork} {deposit : PendingDeposit}
@@ -142,29 +174,7 @@ private theorem applyPendingDeposit_matches {config : Config} {checks : Signatur
   · exact ⟨sized, scored⟩
   · obtain ⟨_, _, rfl⟩ := increaseBalance_eq_ok_iff.mp raised
     exact ⟨sized, scored⟩
-  · unfold addValidatorToRegistry at added
-    split at added
-    · rename_i altair
-      simp only [addValidatorToRegistryAltair, liftAccessor_ok, bind_ok_iff, pure, Except.pure,
-        Except.ok.injEq] at added
-      obtain ⟨index, indexOk, _, validatorsOk, _, _, _, previousOk, _, currentOk, _, scoresOk,
-        rfl⟩ := added
-      have atEnd := (getIndexForNewValidator_ok_iff.mp indexOk).2
-      have validators := setOrAppendRooted_size validatorsOk
-      have previous := setOrAppendList_size previousOk
-      have current := setOrAppendList_size currentOk
-      have scores := setOrAppendList_size scoresOk
-      have one := (sized altair).1
-      have two := (sized altair).2
-      have three := scored altair
-      refine ⟨fun _ => ⟨?_, ?_⟩, fun _ => ?_⟩ <;>
-        simp only at validators previous current scores ⊢ <;>
-        split at validators <;> split at previous <;> split at current <;>
-        split at scores <;> omega
-    · split at added
-      · cases added
-        exact ⟨fun altair => absurd altair ‹_›, fun altair => absurd altair ‹_›⟩
-      · cases added
+  · exact addValidatorToRegistry_matches added sized scored
 
 /-- The pending deposits of an epoch keep one entry for each validator in the flags and scores. -/
 theorem processPendingDeposits_matches {config : Config} {checks : SignatureChecks}
