@@ -21,6 +21,10 @@ Its version is `2.0`, its identifier a string, a number or `null`, and its metho
 Its parameters, when present, are an array.
 
 A response reads back with its result, even `null`, or with its error object.
+
+A JSON value reads as a response exactly when it is an object of three members.
+
+They are the version `2.0`, the identifier, and either the result or an error object.
 -/
 
 public section
@@ -215,5 +219,51 @@ theorem request_eq_ok_iff {j : Json} {r : Request} :
       · rintro ⟨members, -⟩
         exact absurd (allIff.mpr members) hall
   | _ => simp [request]
+
+/-- A JSON value reads as a response exactly when it is an object of three members.
+
+The value of `jsonrpc` is the string `2.0`, and the value of `id` the identifier of the response.
+
+The third member is either `result`, whose value is the result, or `error`, an error object. -/
+theorem response_eq_ok_iff {j : Json} {r : Response} :
+    response j = .ok r ↔ ∃ kvs, j = .obj kvs ∧ kvs.toList.length = 3 ∧
+      kvs.toList.lookup "jsonrpc" = some (.str "2.0") ∧
+      kvs.toList.lookup "id" = some (requestIdJson r.id) ∧
+      ((∃ result, r.outcome = .ok result ∧ kvs.toList.lookup "result" = some result ∧
+          kvs.toList.lookup "error" = none) ∨
+        (∃ e ej, r.outcome = .error e ∧ kvs.toList.lookup "result" = none ∧
+          kvs.toList.lookup "error" = some ej ∧ rpcErrorOfJson ej = .ok e)) := by
+  obtain ⟨id, outcome⟩ := r
+  cases j with
+  | obj kvs =>
+    have versionIff : jsonrpcVersion kvs.toList = true ↔
+        kvs.toList.lookup "jsonrpc" = some (.str "2.0") := by
+      unfold jsonrpcVersion
+      split <;> simp_all
+    simp only [response, Json.obj.injEq, exists_eq_left']
+    by_cases hlen : kvs.toList.length = 3
+    · by_cases hv : jsonrpcVersion kvs.toList = true
+      · rw [and_iff_right hlen, and_iff_right (versionIff.mp hv)]
+        cases hid : kvs.toList.lookup "id" with
+        | none =>
+          simp [hlen, hv, hid, field, reject, throw, throwThe, MonadExceptOf.throw, bind,
+            Except.bind]
+        | some ij =>
+          cases ij <;> cases id <;> cases outcome <;>
+            cases hr : kvs.toList.lookup "result" <;> cases he : kvs.toList.lookup "error" <;>
+            simp [hlen, hv, hid, field, requestId, requestIdJson, reject, throw,
+              throwThe, MonadExceptOf.throw, bind, Except.bind, pure, Except.pure]
+          all_goals split <;> simp_all
+      · constructor
+        · intro h
+          simp [hlen, hv, reject, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+        · rintro ⟨-, version, -⟩
+          exact absurd (versionIff.mpr version) hv
+    · constructor
+      · intro h
+        simp [hlen, reject, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+      · rintro ⟨three, -⟩
+        exact absurd three hlen
+  | _ => simp [response, reject, throw, throwThe, MonadExceptOf.throw]
 
 end EthLib.Execution.Rpc

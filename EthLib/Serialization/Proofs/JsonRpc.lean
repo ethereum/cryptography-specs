@@ -64,6 +64,12 @@ The 64-bit reader returns a number exactly when the reader with the bound `2^64`
 The bounded byte reader succeeds exactly when the byte reader succeeds within the limit.
 
 An object built from pairs with distinct names holds exactly those pairs.
+
+A number reads as an integer exactly when it equals one.
+
+A value reads as an error object exactly when it is an object of a code, a message and the data.
+
+The data may be missing.
 -/
 
 public section
@@ -1376,5 +1382,74 @@ theorem rpcErrorOfJson_json (e : RpcError) : rpcErrorOfJson (rpcErrorJson e) = .
     rw [hobj']
     simp only [rpcErrorOfJson, hall, field, hc, hm, hdata, ite_true, pure_bind, integer_fromInt]
     rfl
+
+/-- A JSON value reads as an integer exactly when it is a number that equals an integer.
+
+Lean writes a number as a mantissa `m` over `10` to the power of an exponent `e`.
+
+It reads as `m / 10 ^ e` when `10 ^ e` divides `m`. -/
+theorem integer_eq_ok_iff {what : String} {j : Lean.Json} {i : Int} :
+    integer what j = .ok i ↔ ∃ m e, j = .num ⟨m, e⟩ ∧ m % 10 ^ e = 0 ∧ i = m / 10 ^ e := by
+  cases j with
+  | num n =>
+    obtain ⟨m, e⟩ := n
+    constructor
+    · intro hi
+      by_cases h : m % 10 ^ e = 0
+      · simp only [integer, h, ↓reduceIte, pure, Except.pure, Except.ok.injEq] at hi
+        exact ⟨m, e, rfl, h, hi.symm⟩
+      · simp [integer, h, reject, throw, throwThe, MonadExceptOf.throw] at hi
+    · rintro ⟨m', e', heq, h, rfl⟩
+      simp only [Lean.Json.num.injEq, Lean.JsonNumber.mk.injEq] at heq
+      obtain ⟨rfl, rfl⟩ := heq
+      simp [integer, h, pure, Except.pure]
+  | _ => simp [integer, reject, throw, throwThe, MonadExceptOf.throw]
+
+/-- A JSON value reads as an error object exactly when it is an object of its members alone.
+
+Those members are `code`, `message` and `data`, and the last may be missing.
+
+The code is the integer under `code`, and the message the string under `message`.
+
+The data is the value under `data`, `null` included, or none when it is missing. -/
+theorem rpcErrorOfJson_eq_ok_iff {j : Lean.Json} {e : RpcError} :
+    rpcErrorOfJson j = .ok e ↔ ∃ kvs, j = .obj kvs ∧
+      (∀ member ∈ kvs.toList, member.1 = "code" ∨ member.1 = "message" ∨
+        member.1 = "data") ∧
+      (∃ c, kvs.toList.lookup "code" = some c ∧ integer "code" c = .ok e.code) ∧
+      kvs.toList.lookup "message" = some (.str e.message) ∧
+      kvs.toList.lookup "data" = e.data := by
+  obtain ⟨code, message, data⟩ := e
+  cases j with
+  | obj kvs =>
+    have allIff : (kvs.toList.all fun (name, _) =>
+        name == "code" || name == "message" || name == "data") = true ↔
+        ∀ member ∈ kvs.toList, member.1 = "code" ∨ member.1 = "message" ∨
+          member.1 = "data" := by
+      simp [List.all_eq_true, or_assoc]
+    simp only [rpcErrorOfJson, Lean.Json.obj.injEq, exists_eq_left']
+    by_cases hall : (kvs.toList.all fun (name, _) =>
+        name == "code" || name == "message" || name == "data") = true
+    · rw [and_iff_right (allIff.mp hall)]
+      cases hc : kvs.toList.lookup "code" with
+      | none =>
+        simp [hall, hc, field, reject, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+      | some cj =>
+        cases hi : integer "code" cj with
+        | error _ => simp [hall, hc, hi, field, bind, Except.bind, pure, Except.pure]
+        | ok c =>
+          cases hm : kvs.toList.lookup "message" with
+          | none =>
+            simp [hall, hc, hi, hm, field, reject, throw, throwThe, MonadExceptOf.throw, bind,
+              Except.bind, pure, Except.pure]
+          | some mj =>
+            cases mj <;> simp [hall, hc, hi, hm, field, string, reject, throw, throwThe,
+              MonadExceptOf.throw, bind, Except.bind, pure, Except.pure]
+    · constructor
+      · intro h
+        simp [hall, reject, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+      · rintro ⟨members, -⟩
+        exact absurd (allIff.mpr members) hall
+  | _ => simp [rpcErrorOfJson, reject, throw, throwThe, MonadExceptOf.throw]
 
 end EthLib.Serialization.JsonRpc

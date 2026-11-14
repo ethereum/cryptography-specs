@@ -3710,6 +3710,10 @@ A 64-bit number decodes to `x` exactly when the number read with the bound `2^64
 The encoder of numbers writes the only text that decodes to the number, at any bound `2^bits` above it (`quantity_eq_ok_iff`).
 So two numbers never share an encoding (`quantityJson_inj`).
 The error object of JSON-RPC 2.0 reads back from what its writer writes, whatever its data, `null` included (`rpcErrorOfJson_json`).
+A JSON number reads as an integer exactly when its mantissa is a multiple of the power of ten under it (`integer_eq_ok_iff`).
+A value reads as an error object exactly when it is an object of the members `code`, `message` and `data` alone (`rpcErrorOfJson_eq_ok_iff`).
+Its code is an integer, and its message a string.
+Its data is the value under `data`, `null` included, and none when the member is missing.
 A withdrawal, and a list of withdrawals, decode back from their encodings (`withdrawal_withdrawalJson`, `array_withdrawal_listJson`, `Execution/Proofs/Rpc/Json.lean`).
 An input that a shared reader rejects is an invalid parameter of the Engine API, for the same reason (`liftM_error`, `liftM_eq_ok_iff`, `Engine/Proofs/Json.lean`).
 A payload of version 4 decodes exactly when it holds the fields of version 4 and each part decodes (`payloadV4_eq_ok_iff`).
@@ -3893,6 +3897,11 @@ Its only members are `jsonrpc`, `id`, `method` and `params`.
 Its `jsonrpc` is the string `2.0`, its `id` a string, a number or `null`, and its `method` a string.
 Its `params`, when present, is an array.
 By that theorem, the reader refuses a request without the version, with its parameters by name, or with an identifier of another type.
+A JSON value reads as a response exactly when it is an object of three members (`response_eq_ok_iff`).
+Its `jsonrpc` is the string `2.0`, and its `id` the identifier.
+The third member is either `result`, of any value, or `error`, an error object.
+So the reader refuses a response with both a result and an error, or with neither.
+It also refuses a member of another name, and a response without the version.
 The error codes of the source come in groups.
 Every code of a group that declares a range lies in that range (`code_mem_range`, `Proofs/Rpc/Errors.lean`).
 No code appears twice (`codes_nodup`), and the code `4444` of pruned history is in no group (`prunedHistoryUnavailable_not_mem`).
