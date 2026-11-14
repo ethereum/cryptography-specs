@@ -70,7 +70,7 @@ theorem syncCommitteeSize_ne_zero_presets :
   decide
 
 /-- A draw of a balance at most the cap succeeds, and accepts a balance at the cap. -/
-private theorem drawAccepts_ok_of_le (fits : DrawFits preset fork) (random : Bytes32) (i : Nat)
+theorem drawAccepts_ok_of_le (fits : DrawFits preset fork) (random : Bytes32) (i : Nat)
     {e : Gwei} (capped : e.toNat ≤ drawCap preset fork) :
     ∃ accepted, drawAccepts preset fork random i e = .ok accepted ∧
       (e.toNat = drawCap preset fork → accepted = true) := by

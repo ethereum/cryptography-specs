@@ -143,3 +143,13 @@ theorem prEvent_mapM_eq_map {α γ : Type} (m : α → ProbComp γ) (v : α → 
   | cons x L ih =>
     rw [List.mapM_cons, List.map_cons, List.map_cons, List.prod_cons, ← ih]
     simp [List.cons.injEq]
+
+/-- Independent computations meet a pointwise relation with the product of the chances. -/
+theorem prEvent_mapM_forall₂ {α γ : Type} (m : α → ProbComp γ) (P : α → γ → Prop)
+    (L : List α) :
+    Pr{let z ← L.mapM m}[List.Forall₂ P L z] = (L.map fun x => Pr{let y ← m x}[P x y]).prod := by
+  induction L with
+  | nil => simp
+  | cons x L ih =>
+    rw [List.mapM_cons, List.map_cons, List.prod_cons, ← ih]
+    simp [List.forall₂_cons]
