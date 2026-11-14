@@ -259,7 +259,8 @@ The preset and the fork are fixed before the run, and an adversary outputs two b
 The extraction roots both commitments, reads the subtree index of the first blob index as the check does, and climbs both proofs.
 Every hash is an oracle call, and the climbs take the inclusion proof depth of the preset.
 The adversary wins when the sidecars have one index, one body root and different commitments, and both climbs reach that body root.
-Only the forks from Deneb and before Gloas put the commitments in the body, so at the other forks no adversary wins.
+Only the forks from Deneb and before Gloas put the commitments in the body.
+At the other forks the extraction reads no subtree index, so it climbs nothing and no adversary wins; no theorem states this.
 
 `collision_of_extractBlobSidecars` shows that every win leaves two different cached inputs with one answer.
 By `hashTreeRootM_bytes48` (`Serialization/Proofs/Ssz/BranchRandomOracle.lean`), the root of a commitment is one hash of its 48 bytes and 16 zero bytes.
@@ -271,7 +272,8 @@ Two different roots that climb to one body root give the inputs that `collision_
 `prEvent_blobWins_le_of_adversary` states the bound with `Q = q + 2 + 2 * depth`, for an adversary that makes at most `q` queries.
 At the mainnet depth of 17, `prEvent_blobWins_le_mainnet` bounds a win by `(q + 36)^2 / 2^256`.
 Beyond the adversary's own queries, `Q` grows with the depth only, not with the blobs or the body.
-With SHA-256 in place of the oracle, `blobWins_sha256_iff` shows that a win is two such sidecars that `verifyBlobSidecarInclusionProof` accepts, again under the idealisation of A4.
+With SHA-256 in place of the oracle, `blobWins_sha256_iff` shows that a win is two such sidecars that `verifyBlobSidecarInclusionProof` accepts.
+Carrying the bound over to SHA-256 is the idealisation of A4, not a theorem.
 
 These other branch checks also hash with SHA-256, and no theorem composes their proofs with the branch bound:
 

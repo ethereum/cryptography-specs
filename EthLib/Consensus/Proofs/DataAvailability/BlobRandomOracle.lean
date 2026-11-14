@@ -18,7 +18,7 @@ A win has probability at most `Q^2 / N`, where `Q` bounds all oracle calls and `
 
 At the mainnet depth of 17, an adversary of `q` calls gives a bound of `(q + 36)^2 / 2^256`.
 
-Only the forks from Deneb and before Gloas put commitments in the body; at others nobody wins.
+Only the forks from Deneb and before Gloas put commitments in the body, where the climbs can run.
 
 With SHA-256 as the node hash, a win is two such sidecars that the inclusion check accepts.
 
