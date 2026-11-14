@@ -2,6 +2,7 @@ module
 
 public import EthLib.Serialization.Der
 public import EthLib.Base.Except
+public import EthLib.Base.Proofs.MapM
 public import EthLib.Base.Proofs.BigEndian
 
 /-!
@@ -21,7 +22,8 @@ The reader is stated against X.690 itself, in terms of octets and numbers.
 - BIT STRING contents count at most 7 unused bits, all zero, and none when no octet follows.
 - BMPString and UniversalString pass when they write Unicode scalar values, two or four octets each.
 - An OBJECT IDENTIFIER is one or more subidentifiers, each on the fewest base-128 octets.
-- A SEQUENCE passes validation when each value it holds passes, and a SET OF also needs them sorted.
+- A SEQUENCE passes validation exactly when each value it holds passes.
+- A SET OF also needs the encodings of those values in ascending order.
 -/
 
 @[expose] public section
@@ -1152,7 +1154,7 @@ private theorem size_eq_length (b : ByteArray) : b.size = b.data.toList.length :
   rfl
 
 /-- A value that the reader returns has an encoding longer than its content, by its header. -/
-private theorem size_lt_of_read_ok {input rest : ByteArray} {v : Value}
+theorem size_lt_of_read_ok {input rest : ByteArray} {v : Value}
     (h : read input = .ok (v, rest)) :
     v.content.size < v.encoded.size ∧ v.encoded.size + rest.size = input.size := by
   obtain ⟨-, -, hin, hv⟩ := read_ok_iff.mp h
@@ -1160,8 +1162,8 @@ private theorem size_lt_of_read_ok {input rest : ByteArray} {v : Value}
   rw [size_eq_length, size_eq_length]
   rcases hv with ⟨-, hv⟩ | ⟨k, -, -, -, -, hv⟩ <;> rw [hv] <;> simp <;> omega
 
-/-- Each value that a read of siblings returns is a read value at most as long as the input. -/
-private theorem children_go_sizes : ∀ (fuel : Nat) (input : ByteArray) (vs : List Value),
+/-- Each value that a read of siblings returns has a header and is at most as long as the input. -/
+theorem children_go_sizes : ∀ (fuel : Nat) (input : ByteArray) (vs : List Value),
     children.go fuel input = .ok vs →
       ∀ v ∈ vs, v.content.size < v.encoded.size ∧ v.encoded.size ≤ input.size := by
   intro fuel
@@ -1228,15 +1230,6 @@ private theorem go_fuel : ∀ (f g : Nat) (w : Value), w.content.size < w.encode
             exact ih g v this.1 (by omega) (by omega)
           simp only [bind, Except.bind, hvs]
 
-/-- A check passes on a list exactly when it passes on each value. -/
-private theorem forM_ok_iff {F : Value → Except Error Unit} :
-    ∀ vs : List Value, vs.forM F = .ok () ↔ ∀ v ∈ vs, F v = .ok ()
-  | [] => by simp [List.forM, pure, Except.pure]
-  | v :: vs => by
-    show (F v >>= fun _ => vs.forM F) = .ok () ↔ _
-    rw [List.forall_mem_cons, ← forM_ok_iff vs]
-    cases F v <;> simp [bind, Except.bind]
-
 /-- A constructed value passes validation exactly when its content reads as values that pass.
 
 A SET OF also needs the encodings of those values in ascending order. -/
@@ -1286,7 +1279,9 @@ theorem validate_sequence_ok_iff {value : Value} (tag : value.tag = 48)
 
 /-- A SET OF passes validation exactly when its content reads as values that each pass.
 
-Their encodings must also come in ascending order, compared octet by octet (X.690 §11.6).
+Their encodings must also come in ascending order, compared octet by octet, a proper prefix first.
+
+X.690 §11.6 pads the shorter encoding with zero octets instead.
 
 Every value that the reader returns has a header, so its encoding is longer than its content. -/
 theorem validate_set_ok_iff {value : Value} (tag : value.tag = 49)

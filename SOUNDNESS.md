@@ -827,7 +827,8 @@ A PrintableString holds the letters, digits, space and `'()+,-./:=?` of X.680 §
 `validate_eq_error_tag` states that a value of every tag outside the subset fails with a tag error.
 `validate_sequence_ok_iff` and `validate_set_ok_iff` state that a SEQUENCE or a SET OF passes exactly when its content reads as values that each pass.
 A SET OF also needs the encodings of those values in ascending order, compared octet by octet (X.690 §11.6).
-Both hold for a value whose encoding is longer than its content, as is every value that the reader returns.
+Both hold for a value whose encoding is longer than its content.
+Every value that the reader returns is one (`size_lt_of_read_ok`, `children_go_sizes`).
 The comparison puts a proper prefix first, where X.690 pads the shorter encoding with zero octets.
 No theorem states that one sibling encoding is never a proper prefix of another.
 No theorem states the validation of INTEGER, OCTET STRING or IA5String.
