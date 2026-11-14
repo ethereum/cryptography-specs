@@ -458,7 +458,7 @@ theorem updateFastConfirmationVariables_confirmedRoot {fcr after : FastConfirmat
 
 /-- The update of the tracked variables sets the checkpoints by the epoch boundaries.
 
-The greatest unrealized checkpoint is taken from the store before the first slot of an epoch.
+At the last slot of an epoch, the greatest unrealized checkpoint is taken from the store.
 
 At the first slot of an epoch, the observed justified checkpoints move on by one epoch.
 

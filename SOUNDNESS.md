@@ -2783,14 +2783,14 @@ The rule makes two walks, and `Store.getAncestorRoots_of_append` in `Consensus/P
 No theorem yet shows that the roots of a walk are in the chain of the head.
 
 These theorems prove no safety: no theorem yet shows that a start is safe, or that a one-confirmed walk keeps a block in the chain of every honest head.
-The two root-selection theorems do not record every check of the rule.
+`Store.onFastConfirmation_confirmedRoot` and `Store.getLatestConfirmed_eq_or` do not record every check of the rule.
 For the start they leave out the other checks that compare the epochs and the slots of the blocks.
 For the walks they leave out the checks on the epochs of the start and of the walked blocks.
 They also leave out the check that the head of the slot before holds each block of the first walk.
 They leave out the checks that a voting source or an unrealized justification is recent.
 They also leave out the calls to `willNoConflictingCheckpointBeJustified` and `willCurrentTargetBeJustified`, whose tests `Consensus/Proofs/ForkChoice/FastConfirmation/Indicators.lean` states on their own.
 
-The same module also records the checks that those two theorems leave out.
+The same module also records every check on the start, and the tests that the stored root passes.
 `Store.SelectsStart` names the start of a call with every check that decides it.
 These are the three checks that keep the block stored before, and the four that replace it by the observed justified block.
 `Store.FastConfirmationChecked` names the checkpoint tests that a later root passes.

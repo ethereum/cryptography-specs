@@ -772,7 +772,7 @@ theorem getLatestConfirmed_eq_or {fcr : FastConfirmationStore} {head root : Root
 
 That root and each root before it in the walk are one-confirmed.
 
-It also passes the checkpoint tests of its walk, read in the store after the call.
+It also passes the checkpoint tests of its walk, read in the fast confirmation store after the call.
 
 The theorem assumes only that the call succeeds, and it says nothing about safety. -/
 theorem onFastConfirmation_checked {fcr after : FastConfirmationStore}
