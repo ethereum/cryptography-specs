@@ -346,6 +346,11 @@ theorem field_eq_ok_iff {what name : String} {fs : List (String × Lean.Json)} {
   cases h : fs.lookup name <;>
     simp [pure, Except.pure]
 
+/-- A string decodes exactly from its JSON string. -/
+theorem string_eq_ok_iff {what : String} {j : Lean.Json} {s : String} :
+    string what j = .ok s ↔ j = .str s := by
+  cases j <;> simp [string, pure, Except.pure]
+
 /-- A list decodes exactly when the value is an array whose items each decode, in order.
 
 Item `i` of the list is the decoded item `i` of the array. -/

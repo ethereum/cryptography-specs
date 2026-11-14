@@ -191,11 +191,9 @@ theorem RunBounded.of_processEpoch {config : Config} {checks : SignatureChecks}
   have rootsLe := processEpoch_historicalRoots_size_le computed
   have slashedLe := processEpoch_slashedBalanceSum_le computed
   -- The weight of the registry load is at least one, so the registry size is within the bound.
-  have factor : 1 ≤ registryLoadFactor fork := by
-    unfold registryLoadFactor
-    split <;> omega
   have sizeLe : state.validators.data.size ≤ start.load :=
-    (Nat.le_add_right _ _).trans ((Nat.le_mul_of_pos_left _ factor).trans holds.load)
+    (Nat.le_add_right _ _).trans
+      ((Nat.le_mul_of_pos_left _ (one_le_registryLoadFactor fork)).trans holds.load)
   have budgetLe : effectiveBalanceSum state ≤ budget := (le_max_right _ _).trans budgeted
   -- The supply grows by at most the issuance of the budget.
   have supplyAfter : balanceSum after + pendingDepositSum after ≤

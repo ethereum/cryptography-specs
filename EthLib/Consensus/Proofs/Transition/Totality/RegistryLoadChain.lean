@@ -45,6 +45,11 @@ Before Electra the count can still double, at the upgrade to Electra. -/
 def registryLoadFactor (fork : Fork) : Nat :=
   if fork < .pectra then 2 else 1
 
+/-- The weight of the count is at least one. -/
+theorem one_le_registryLoadFactor (fork : Fork) : 1 ≤ registryLoadFactor fork := by
+  unfold registryLoadFactor
+  split <;> omega
+
 /-- One upgrade never raises the weighted count. -/
 theorem upgradeNext_weightedRegistryLoad_le {pre : ForkedBeaconState preset}
     {next : {post : ForkedBeaconState preset // pre.fork < post.fork}}
@@ -131,10 +136,8 @@ theorem Run.registryLoad_le_limit {first last : ForkedBeaconState preset} {limit
     (room : registryLoadFactor first.fork * registryLoad first.state + run.loadBound ≤
       registryLoadFactor last.fork * limit) :
     registryLoad last.state ≤ limit := by
-  have factor : 0 < registryLoadFactor last.fork := by
-    unfold registryLoadFactor
-    split <;> omega
-  exact Nat.le_of_mul_le_mul_left (Nat.le_trans run.registryLoad_le room) factor
+  exact Nat.le_of_mul_le_mul_left (Nat.le_trans run.registryLoad_le room)
+    (one_le_registryLoadFactor last.fork)
 
 /-- At the end of a run, the registry is within its limit, when the start and the blocks leave room.
 

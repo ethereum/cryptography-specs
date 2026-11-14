@@ -16,6 +16,7 @@ public import EthLib.Consensus.Proofs.BeaconApi.Events
 public import EthLib.Consensus.Proofs.BeaconApi.Identifiers
 public import EthLib.Consensus.Proofs.BeaconApi.LightClient
 public import EthLib.Consensus.Proofs.BeaconApi.LightClientBootstrap
+public import EthLib.Consensus.Proofs.BeaconApi.LightClientBootstrapReachable
 public import EthLib.Consensus.Proofs.BeaconApi.ObjectEvents
 public import EthLib.Consensus.Proofs.BeaconApi.Produce
 public import EthLib.Consensus.Proofs.BeaconApi.Publish
@@ -265,6 +266,7 @@ public import EthLib.Consensus.Proofs.Transition.Totality.Rewards
 public import EthLib.Consensus.Proofs.Transition.Totality.RewardsBeforeAltair
 public import EthLib.Consensus.Proofs.Transition.Totality.RunBounds
 public import EthLib.Consensus.Proofs.Transition.Totality.RunHypotheses
+public import EthLib.Consensus.Proofs.Transition.Totality.RunStep
 public import EthLib.Consensus.Proofs.Transition.Totality.RunUpgrades
 public import EthLib.Consensus.Proofs.Transition.Totality.Shape
 public import EthLib.Consensus.Proofs.Transition.Totality.Signers
