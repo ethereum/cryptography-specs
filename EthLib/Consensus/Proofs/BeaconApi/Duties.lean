@@ -38,6 +38,18 @@ A sync request before Altair is refused, and so is a PTC request before Gloas.
 In the current epoch, each proposer duty from the slot of the state on names its proposer.
 
 Each seat of a sync duty holds the key of the validator.
+
+Each refusal of the sync answer is one of four errors, all with code 400.
+
+Under bounds on the slots, the dependent root fails only with the error of an invalid epoch.
+
+Before Fulu, both proposer answers give code 500 to a current epoch with no active validator.
+
+From Fulu, under the same bounds, a proposer answer gets code 500 exactly at a lookahead entry.
+
+That entry lies at a slot of the requested epoch, and names no validator.
+
+Under those bounds, if each lookahead entry names a validator, the answer fails only with code 400.
 -/
 
 @[expose] public section
@@ -555,6 +567,22 @@ theorem dependentRoot_eq {state : BeaconState preset fork} {lag : Nat} {epoch : 
   simp [dependentRoot, Nat.not_lt.mpr late, started, positive, Except.mapError, bind,
     Except.bind]
 
+/-- The first slot of the epoch a lag before the given one is that epoch times the epoch length.
+
+It needs a lag of at most the given epoch, and that product to fit in 64 bits. -/
+private theorem dependentRoot_start_exists {lag : Nat} {epoch : Epoch} (late : lag ≤ epoch.toNat)
+    (fits : (epoch.toNat - lag) * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64) :
+    ∃ start, computeStartSlotAtEpoch preset (epoch - lag.toUInt64) = .ok start ∧
+      start.toNat = (epoch.toNat - lag) * preset.SLOTS_PER_EPOCH.toNat := by
+  have epochSmall := epoch.toNat_lt
+  have lagNat : lag.toUInt64.toNat = lag := by
+    rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt (by omega)]
+  have difference : (epoch - lag.toUInt64).toNat = epoch.toNat - lag := by
+    rw [UInt64.toNat_sub_of_le _ _ (UInt64.le_iff_toNat_le.mpr (by omega)), lagNat]
+  obtain ⟨start, startNat⟩ := Uint64.exists_toNat_eq fits
+  exact ⟨start, computeStartSlotAtEpoch_ok_iff.mpr
+    ⟨by rw [difference]; exact fits, by rw [difference, startNat]⟩, startNat⟩
+
 /-- A dependent root whose slot has left the block roots gives the error of an invalid epoch.
 
 The error has code 400.
@@ -572,16 +600,9 @@ theorem dependentRoot_too_old {state : BeaconState preset fork} {lag : Nat} {epo
   have late : lag < epoch.toNat := by
     refine Nat.lt_of_not_le fun early => ?_
     simp [Nat.sub_eq_zero_of_le early] at started
-  have epochSmall := epoch.toNat_lt
   have slotSmall := state.slot.toNat_lt
-  have lagNat : lag.toUInt64.toNat = lag := by
-    rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt (by omega)]
-  have difference : (epoch - lag.toUInt64).toNat = epoch.toNat - lag := by
-    rw [UInt64.toNat_sub_of_le _ _ (UInt64.le_iff_toNat_le.mpr (by omega)), lagNat]
-  obtain ⟨start, startNat⟩ := Uint64.exists_toNat_eq
-    (n := (epoch.toNat - lag) * preset.SLOTS_PER_EPOCH.toNat) (by omega)
-  have startOk : computeStartSlotAtEpoch preset (epoch - lag.toUInt64) = .ok start :=
-    computeStartSlotAtEpoch_ok_iff.mpr ⟨by rw [difference]; omega, by rw [difference, startNat]⟩
+  obtain ⟨start, startOk, startNat⟩ :=
+    dependentRoot_start_exists (preset := preset) late.le (by omega)
   have nonzero : start.toNat ≠ 0 := by omega
   have positive : start ≠ 0 := fun zero => nonzero (by rw [zero, UInt64.toNat_zero])
   -- The slot before the start is before the slot of the state, by more than the buffer.
@@ -603,6 +624,29 @@ theorem dependentRoot_too_old {state : BeaconState preset fork} {lag : Nat} {epo
   rw [dependentRoot_eq late.le startOk positive]
   simp [getBlockRootAtSlot, before, liftArith, bound, beyond, Except.mapError, rootError,
     throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+
+/-- The dependent root fails only with the error of an invalid epoch, code 400.
+
+It needs the epoch a lag before the given one to start at a slot that fits in 64 bits.
+
+It needs the slot of the state plus the length of the buffer of roots to be at most `2^64`. -/
+theorem dependentRoot_error {state : BeaconState preset fork} {lag : Nat} {epoch : Epoch}
+    {genesisRoot : Root} {error : ErrorMessage}
+    (fits : (epoch.toNat - lag) * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64)
+    (room : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat ≤ 2 ^ 64)
+    (failed : dependentRoot state lag epoch genesisRoot = .error error) :
+    error = invalidEpoch epoch := by
+  by_cases early : epoch.toNat < lag
+  · simp [dependentRoot, early, pure, Except.pure] at failed
+  have late : lag ≤ epoch.toNat := Nat.le_of_not_lt early
+  obtain ⟨start, startOk, -⟩ := dependentRoot_start_exists late fits
+  by_cases zero : start = 0
+  · simp [dependentRoot, early, startOk, zero, Except.mapError, bind, Except.bind, pure,
+      Except.pure] at failed
+  rw [dependentRoot_eq late startOk zero] at failed
+  obtain ⟨fault, read, rfl⟩ := mapError_eq_error failed
+  rw [getBlockRootAtSlot_error room read]
+  rfl
 
 /-- Before Altair, the sync answer is the error with code 400 that names Altair.
 
@@ -784,6 +828,60 @@ theorem dutiesResponse_sync_outside {config : Config} {state : BeaconState prese
     omega
   simp [dutiesResponse, altair, syncDuties, syncCommitteeOf, other, notNext, bind, Except.bind]
 
+/-- Each refusal of the sync answer is one of four errors.
+
+Two are the errors of a state before Altair and of an empty request.
+
+The third is the error of an epoch outside the current and next periods of the state.
+
+The fourth is the error of a requested index that names no validator of the state. -/
+theorem dutiesResponse_sync_error {config : Config} {state : BeaconState preset fork}
+    {epoch : Epoch} {indices : List ValidatorIndex} {genesisRoot : Root} {error : ErrorMessage}
+    (failed : dutiesResponse config state .sync epoch indices genesisRoot = .error error) :
+    error = beforeFork "sync duties" .altair ∨ error = emptyIndices ∨
+      error = { code := 400,
+                message := "Epoch is outside the sync committee period of the state" } ∨
+      ∃ index ∈ indices, error = invalidIndex index := by
+  by_cases altair : .altair ≤ fork
+  case neg =>
+    rw [dutiesResponse_sync_of_lt_altair (Nat.lt_of_not_le altair)] at failed
+    cases failed
+    exact .inl rfl
+  simp only [dutiesResponse, altair, ↓reduceDIte] at failed
+  rcases bind_eq_error failed with refused | ⟨_, -, failed⟩
+  case inr => cases failed
+  unfold syncDuties at refused
+  by_cases empty : indices.isEmpty
+  · simp [empty, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at refused
+    exact .inr (.inl refused.symm)
+  simp only [empty, Bool.false_eq_true, ↓reduceIte] at refused
+  rcases bind_eq_error refused with outside | ⟨committee, -, refused⟩
+  · -- The committee of a period fails only outside the current and next periods.
+    by_cases same : computeSyncCommitteePeriod preset epoch =
+        computeSyncCommitteePeriod preset (getCurrentEpoch state)
+    · simp [syncCommitteeOf, same] at outside
+    by_cases next : (computeSyncCommitteePeriod preset epoch).toNat =
+        (computeSyncCommitteePeriod preset (getCurrentEpoch state)).toNat + 1
+    · simp [syncCommitteeOf, same, next] at outside
+    simp [syncCommitteeOf, same, next] at outside
+    exact .inr (.inr (.inl outside.symm))
+  rcases bind_eq_error refused with unknown | ⟨_, -, refused⟩
+  · -- Each duty fails only by an index that names no validator.
+    obtain ⟨index, member, step⟩ := exists_mem_of_mapM_error unknown
+    unfold syncDuty at step
+    rcases bind_eq_error step with named | ⟨_, -, step⟩
+    · obtain ⟨_, -, rfl⟩ := mapError_eq_error named
+      exact .inr (.inr (.inr ⟨index, member, rfl⟩))
+    · split at step <;> cases step
+  · cases refused
+
+/-- The sync answer fails only with code 400. -/
+theorem dutiesResponse_sync_error_code {config : Config} {state : BeaconState preset fork}
+    {epoch : Epoch} {indices : List ValidatorIndex} {genesisRoot : Root} {error : ErrorMessage}
+    (failed : dutiesResponse config state .sync epoch indices genesisRoot = .error error) :
+    error.code = 400 := by
+  rcases dutiesResponse_sync_error failed with rfl | rfl | rfl | ⟨_, -, rfl⟩ <;> rfl
+
 /-- The PTC duty lookup of a validator of the state succeeds when its PTC assignment does. -/
 private theorem ptcDuty_exists {config : Config} {state : BeaconState preset fork}
     {gloas : .glamsterdam ≤ fork} {epoch : Epoch} {index : ValidatorIndex}
@@ -877,5 +975,308 @@ theorem dutiesResponse_proposer_outside {config : Config} {state : BeaconState p
       rw [same] at outside
       omega
     exact dutiesResponse_proposer_not_current (.inr ⟨rfl, Nat.lt_of_not_le fulu⟩) other
+
+/-- Both proposer answers give code 500 to a current epoch with no active validator.
+
+The draw of its first slot has no candidate, so that epoch gets code 500, not code 400.
+
+It needs a fork before Fulu, where the answers draw the proposers.
+
+It needs an epoch of at least one slot. -/
+theorem dutiesResponse_proposer_no_active {config : Config} {state : BeaconState preset fork}
+    {kind : DutyKind} {indices : List ValidatorIndex} {genesisRoot : Root}
+    (version : kind = .proposerV1 ∨ kind = .proposerV2) (early : fork < .fusaka)
+    (positive : preset.SLOTS_PER_EPOCH ≠ 0)
+    (idle : getActiveValidatorIndices state (getCurrentEpoch state) = []) :
+    ∃ error, dutiesResponse config state kind (getCurrentEpoch state) indices genesisRoot =
+      .error error ∧ error.code = 500 := by
+  have notFulu : ¬.fusaka ≤ fork := Nat.not_le.2 early
+  have notGloas : ¬.glamsterdam ≤ fork := fun gloas => notFulu (Nat.le_trans (by decide) gloas)
+  -- The draw of the first slot has no candidate, so the proposers of the epoch fail.
+  obtain ⟨fault, drawFailed⟩ :
+      ∃ fault, getBeaconProposerIndices state (getCurrentEpoch state) = .error fault := by
+    cases drawn : getBeaconProposerIndices state (getCurrentEpoch state) with
+    | error fault => exact ⟨fault, rfl⟩
+    | ok proposers =>
+      unfold getBeaconProposerIndices computeProposerIndices at drawn
+      obtain ⟨active, activeOk, drawn⟩ := bind_ok_iff.mp drawn
+      obtain ⟨_, -, drawn⟩ := bind_ok_iff.mp drawn
+      obtain ⟨_, -, drawn⟩ := bind_ok_iff.mp drawn
+      have first := vector_mapM_ok_getElem drawn 0
+        (Nat.pos_of_ne_zero fun zero => positive (UInt64.toNat_inj.mp (by simpa using zero)))
+      obtain ⟨_, -, first⟩ := bind_ok_iff.mp first
+      rw [getActiveValidatorIndicesChecked_ok activeOk, idle] at first
+      simp [computeSlotProposer, notGloas, proposerCandidates, computeProposerIndex, throw,
+        throwThe, MonadExceptOf.throw, bind, Except.bind] at first
+  refine ⟨internalError (reprStr fault), ?_, rfl⟩
+  rcases version with rfl | rfl <;>
+    simp [dutiesResponse, proposerDuties, epochProposers, notFulu, drawFailed, Except.mapError,
+      bind, Except.bind]
+
+/-- The proposers of an epoch are the entries of the lookahead at the slots of that epoch.
+
+It needs a fork from Fulu, and an epoch from the current one to the end of the seed lookahead. -/
+private theorem epochProposers_lookahead {state : BeaconState preset fork}
+    (fulu : .fusaka ≤ fork) {epoch : Epoch}
+    (served : (getCurrentEpoch state).toNat ≤ epoch.toNat ∧
+      epoch.toNat ≤ (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat) :
+    epochProposers state epoch = .ok (((state.proposerLookahead fulu).toList.drop
+      ((epoch.toNat - (getCurrentEpoch state).toNat) * preset.SLOTS_PER_EPOCH.toNat)).take
+      preset.SLOTS_PER_EPOCH.toNat) := by
+  have after : getCurrentEpoch state ≤ epoch := UInt64.le_iff_toNat_le.mpr served.1
+  simp [epochProposers, fulu, after, served.2, pure, Except.pure]
+
+/-- Once the proposers of an epoch are read, the proposer duties fail only with code 500. -/
+private theorem proposerDuties_error_code {state : BeaconState preset fork} {epoch : Epoch}
+    {proposers : List ValidatorIndex} {error : ErrorMessage}
+    (read : epochProposers state epoch = .ok proposers)
+    (failed : proposerDuties state epoch = .error error) : error.code = 500 := by
+  unfold proposerDuties at failed
+  rcases bind_eq_error failed with refused | ⟨_, -, failed⟩
+  · rw [read] at refused
+    cases refused
+  rcases bind_eq_error failed with refused | ⟨_, -, failed⟩
+  · obtain ⟨_, -, rfl⟩ := mapError_eq_error refused
+    rfl
+  -- Each duty fails at its slot or at its validator, both with code 500.
+  obtain ⟨⟨proposer, offset⟩, -, step⟩ := exists_mem_of_mapM_error failed
+  dsimp only at step
+  rcases bind_eq_error step with refused | ⟨_, -, step⟩
+  · obtain ⟨_, -, rfl⟩ := mapError_eq_error refused
+    rfl
+  rcases bind_eq_error step with refused | ⟨_, -, step⟩
+  · obtain ⟨_, -, rfl⟩ := mapError_eq_error refused
+    rfl
+  · cases step
+
+/-- A proposer answer reads the duties of its epoch, then a dependent root.
+
+The duties read the lookahead at the slots of that epoch, whose start fits in 64 bits.
+
+It needs a fork from Fulu, where the answers read the proposers from the lookahead.
+
+It needs the first answer at the current epoch, or the second at an epoch of the lookahead.
+
+It needs the slots of the epoch to fit in 64 bits. -/
+private theorem dutiesResponse_proposer_lag_exists {config : Config}
+    {state : BeaconState preset fork} {kind : DutyKind} {epoch : Epoch}
+    {indices : List ValidatorIndex} {genesisRoot : Root} (fulu : .fusaka ≤ fork)
+    (served : kind = .proposerV1 ∧ epoch = getCurrentEpoch state ∨
+      kind = .proposerV2 ∧ (getCurrentEpoch state).toNat ≤ epoch.toNat ∧
+        epoch.toNat ≤ (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat)
+    (slotsFit : (epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat ≤ 2 ^ 64) :
+    ∃ lag, dutiesResponse config state kind epoch indices genesisRoot =
+        (do
+          let duties ← proposerDuties state epoch
+          return { dependentRoot := some (← dependentRoot state lag epoch genesisRoot),
+                   data := .arr (duties.map ProposerDuty.toJson).toArray }) ∧
+      epochProposers state epoch = .ok (((state.proposerLookahead fulu).toList.drop
+        ((epoch.toNat - (getCurrentEpoch state).toNat) * preset.SLOTS_PER_EPOCH.toNat)).take
+        preset.SLOTS_PER_EPOCH.toNat) ∧
+      epoch.toNat * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64 := by
+  have window : (getCurrentEpoch state).toNat ≤ epoch.toNat ∧
+      epoch.toNat ≤ (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat := by
+    rcases served with ⟨-, rfl⟩ | ⟨-, window⟩
+    · omega
+    · exact window
+  have startFits : epoch.toNat * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64 := by
+    rw [Nat.succ_mul] at slotsFit
+    rcases Nat.eq_zero_or_pos preset.SLOTS_PER_EPOCH.toNat with zero | positive
+    · rw [zero, Nat.mul_zero]
+      exact Nat.two_pow_pos 64
+    · omega
+  rcases served with ⟨rfl, rfl⟩ | ⟨rfl, -⟩
+  · exact ⟨0, by simp [dutiesResponse], epochProposers_lookahead fulu window, startFits⟩
+  · exact ⟨1, rfl, epochProposers_lookahead fulu window, startFits⟩
+
+/-- A proposer answer gets code 500 exactly when the lookahead names an index past the registry.
+
+That index is the entry of the lookahead at a slot of the requested epoch.
+
+It needs a fork from Fulu, where the answers read the proposers from the lookahead.
+
+It needs the first answer at the current epoch, or the second at an epoch of the lookahead.
+
+It needs the slots of the epoch to fit in 64 bits.
+
+It needs the slot of the state plus the length of the buffer of roots to be at most `2^64`. -/
+theorem dutiesResponse_proposer_internal_iff {config : Config} {state : BeaconState preset fork}
+    {kind : DutyKind} {epoch : Epoch} {indices : List ValidatorIndex} {genesisRoot : Root}
+    (fulu : .fusaka ≤ fork)
+    (served : kind = .proposerV1 ∧ epoch = getCurrentEpoch state ∨
+      kind = .proposerV2 ∧ (getCurrentEpoch state).toNat ≤ epoch.toNat ∧
+        epoch.toNat ≤ (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat)
+    (slotsFit : (epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat ≤ 2 ^ 64)
+    (room : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat ≤ 2 ^ 64) :
+    (∃ error, dutiesResponse config state kind epoch indices genesisRoot = .error error ∧
+        error.code = 500) ↔
+      ∃ offset < preset.SLOTS_PER_EPOCH.toNat, ∃ proposer,
+        (state.proposerLookahead fulu)[(epoch.toNat - (getCurrentEpoch state).toNat) *
+          preset.SLOTS_PER_EPOCH.toNat + offset]? = some proposer ∧
+        state.validators.data.size ≤ proposer.toNat := by
+  -- Both answers read the proposer duties, then a dependent root.
+  obtain ⟨lag, answer, read, startFits⟩ := dutiesResponse_proposer_lag_exists (config := config)
+    (indices := indices) (genesisRoot := genesisRoot) fulu served slotsFit
+  rw [Nat.succ_mul] at slotsFit
+  obtain ⟨start, startNat⟩ := Uint64.exists_toNat_eq startFits
+  have startOk : computeStartSlotAtEpoch preset epoch = .ok start :=
+    computeStartSlotAtEpoch_ok_iff.mpr ⟨startFits, startNat⟩
+  -- The slot of each proposer of the epoch fits, and the root fails only with code 400.
+  have slotOk : ∀ offset < preset.SLOTS_PER_EPOCH.toNat,
+      Uint64.addChecked start offset.toUInt64 = .ok (start + offset.toUInt64) := by
+    intro offset offsetLt
+    have small : offset < 2 ^ 64 := Nat.lt_trans offsetLt preset.SLOTS_PER_EPOCH.toNat_lt
+    refine Uint64.addChecked_of_lt ?_
+    rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt small, startNat]
+    omega
+  have rootCode : ∀ error, dependentRoot state lag epoch genesisRoot = .error error →
+      error.code = 400 := fun error failed => by
+    rw [dependentRoot_error (Nat.lt_of_le_of_lt (Nat.mul_le_mul_right _ (Nat.sub_le _ _))
+      startFits) room failed]
+    rfl
+  have entryOf : ∀ proposer offset, (proposer, offset) ∈
+      (((state.proposerLookahead fulu).toList.drop
+        ((epoch.toNat - (getCurrentEpoch state).toNat) * preset.SLOTS_PER_EPOCH.toNat)).take
+        preset.SLOTS_PER_EPOCH.toNat).zipIdx ↔
+      offset < preset.SLOTS_PER_EPOCH.toNat ∧
+        (state.proposerLookahead fulu)[(epoch.toNat - (getCurrentEpoch state).toNat) *
+          preset.SLOTS_PER_EPOCH.toNat + offset]? = some proposer := by
+    intro proposer offset
+    rw [List.mem_zipIdx_iff_getElem?, List.getElem?_take, List.getElem?_drop,
+      Vector.getElem?_toList]
+    by_cases lt : offset < preset.SLOTS_PER_EPOCH.toNat <;> simp [lt]
+  constructor
+  · rintro ⟨error, failed, code⟩
+    rw [answer] at failed
+    rcases bind_eq_error failed with refused | ⟨_, -, failed⟩
+    · -- The duties fail at a slot whose proposer names no validator.
+      unfold proposerDuties at refused
+      rcases bind_eq_error refused with bad | ⟨proposers, readOk, refused⟩
+      · rw [read] at bad
+        cases bad
+      rw [read] at readOk
+      obtain rfl := Except.ok.inj readOk
+      rcases bind_eq_error refused with bad | ⟨started, startedOk, refused⟩
+      · rw [startOk] at bad
+        cases bad
+      rw [mapError_ok_iff, startOk] at startedOk
+      obtain rfl := Except.ok.inj startedOk
+      obtain ⟨⟨proposer, offset⟩, member, step⟩ := exists_mem_of_mapM_error refused
+      obtain ⟨offsetLt, entry⟩ := (entryOf proposer offset).mp member
+      dsimp only at step
+      rcases bind_eq_error step with bad | ⟨_, -, step⟩
+      · rw [slotOk offset offsetLt] at bad
+        cases bad
+      rcases bind_eq_error step with bad | ⟨_, -, step⟩
+      · obtain ⟨_, named, -⟩ := mapError_eq_error bad
+        refine ⟨offset, offsetLt, proposer, entry, Nat.le_of_not_lt fun inside => ?_⟩
+        rw [getValidator_eq_ok_iff.mpr (Array.getElem?_eq_getElem inside)] at named
+        cases named
+      · cases step
+    · -- With the duties, only the dependent root can fail, and it does with code 400.
+      rcases bind_eq_error failed with refused | ⟨_, -, failed⟩
+      · have := rootCode _ refused
+        omega
+      · cases failed
+  · rintro ⟨offset, offsetLt, proposer, entry, past⟩
+    cases dutiesOk : proposerDuties state epoch with
+    | error error =>
+      refine ⟨error, ?_, proposerDuties_error_code read dutiesOk⟩
+      rw [answer, dutiesOk]
+      rfl
+    | ok duties =>
+      -- The duty at the offset reads the validator of the proposer, which fails.
+      unfold proposerDuties at dutiesOk
+      obtain ⟨proposers, readOk, dutiesOk⟩ := bind_ok_iff.mp dutiesOk
+      rw [read] at readOk
+      obtain rfl := Except.ok.inj readOk
+      obtain ⟨_, -, dutiesOk⟩ := bind_ok_iff.mp dutiesOk
+      obtain ⟨_, step⟩ := mapM_ok_of_mem dutiesOk (proposer, offset)
+        ((entryOf proposer offset).mpr ⟨offsetLt, entry⟩)
+      dsimp only at step
+      obtain ⟨_, -, step⟩ := bind_ok_iff.mp step
+      obtain ⟨_, named, -⟩ := bind_ok_iff.mp step
+      rw [mapError_ok_iff, getValidator_eq_ok_iff, Array.getElem?_eq_none past] at named
+      cases named
+
+/-- A proposer answer fails only with the error of an invalid epoch, code 400.
+
+It needs a fork from Fulu, where the answers read the proposers from the lookahead.
+
+It needs one of the two proposer answers.
+
+It needs the slots of the epoch to fit in 64 bits.
+
+It needs the slot of the state plus the length of the buffer of roots to be at most `2^64`.
+
+It needs the lookahead to name only validators of the state.
+
+It holds even with no active validator, unlike an answer before Fulu. -/
+theorem dutiesResponse_proposer_error {config : Config}
+    {state : BeaconState preset fork} {kind : DutyKind} {epoch : Epoch}
+    {indices : List ValidatorIndex} {genesisRoot : Root} {error : ErrorMessage}
+    (fulu : .fusaka ≤ fork) (version : kind = .proposerV1 ∨ kind = .proposerV2)
+    (slotsFit : (epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat ≤ 2 ^ 64)
+    (room : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat ≤ 2 ^ 64)
+    (known : ∀ proposer ∈ state.proposerLookahead fulu,
+      proposer.toNat < state.validators.data.size)
+    (failed : dutiesResponse config state kind epoch indices genesisRoot = .error error) :
+    error = invalidEpoch epoch := by
+  by_cases served : kind = .proposerV1 ∧ epoch = getCurrentEpoch state ∨
+      kind = .proposerV2 ∧ (getCurrentEpoch state).toNat ≤ epoch.toNat ∧
+        epoch.toNat ≤ (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat
+  · obtain ⟨lag, answer, read, startFits⟩ := dutiesResponse_proposer_lag_exists (config := config)
+      (indices := indices) (genesisRoot := genesisRoot) fulu served slotsFit
+    rw [answer] at failed
+    rcases bind_eq_error failed with refused | ⟨_, -, failed⟩
+    · -- The duties fail only with code 500, which a lookahead of validators of the state excludes.
+      obtain ⟨_, -, proposer, entry, past⟩ := (dutiesResponse_proposer_internal_iff
+        (config := config) (indices := indices) (genesisRoot := genesisRoot) fulu served slotsFit
+        room).mp ⟨error, by rw [answer, refused]; rfl, proposerDuties_error_code read refused⟩
+      have inside := known proposer (Vector.mem_of_getElem? entry)
+      omega
+    -- With the duties, only the dependent root can fail, with the error of an invalid epoch.
+    rcases bind_eq_error failed with refused | ⟨_, -, failed⟩
+    · exact dependentRoot_error (Nat.lt_of_le_of_lt (Nat.mul_le_mul_right _ (Nat.sub_le _ _))
+        startFits) room refused
+    · cases failed
+  -- The answer refuses any other epoch with the error of an invalid epoch.
+  rcases version with rfl | rfl
+  · have other : epoch ≠ getCurrentEpoch state := fun same => served (.inl ⟨rfl, same⟩)
+    rw [dutiesResponse_proposer_not_current (.inl rfl) other] at failed
+    cases failed
+    rfl
+  · have outside : epoch.toNat < (getCurrentEpoch state).toNat ∨
+        (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat < epoch.toNat := by
+      by_cases low : epoch.toNat < (getCurrentEpoch state).toNat
+      · exact .inl low
+      · exact .inr (Nat.lt_of_not_le fun high => served (.inr ⟨rfl, Nat.le_of_not_lt low, high⟩))
+    rw [dutiesResponse_proposer_outside outside] at failed
+    cases failed
+    rfl
+
+/-- A proposer answer fails only with code 400.
+
+It needs a fork from Fulu, where the answers read the proposers from the lookahead.
+
+It needs one of the two proposer answers.
+
+It needs the slots of the epoch to fit in 64 bits.
+
+It needs the slot of the state plus the length of the buffer of roots to be at most `2^64`.
+
+It needs the lookahead to name only validators of the state. -/
+theorem dutiesResponse_proposer_error_code {config : Config}
+    {state : BeaconState preset fork} {kind : DutyKind} {epoch : Epoch}
+    {indices : List ValidatorIndex} {genesisRoot : Root} {error : ErrorMessage}
+    (fulu : .fusaka ≤ fork) (version : kind = .proposerV1 ∨ kind = .proposerV2)
+    (slotsFit : (epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat ≤ 2 ^ 64)
+    (room : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat ≤ 2 ^ 64)
+    (known : ∀ proposer ∈ state.proposerLookahead fulu,
+      proposer.toNat < state.validators.data.size)
+    (failed : dutiesResponse config state kind epoch indices genesisRoot = .error error) :
+    error.code = 400 := by
+  rw [dutiesResponse_proposer_error fulu version slotsFit room known failed]
+  rfl
 
 end EthLib.Consensus.BeaconApi

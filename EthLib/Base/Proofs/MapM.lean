@@ -436,6 +436,12 @@ theorem mapM_error {xs : List α} {e : ε} (h : xs.mapM f = .error e) :
         | zero => exact ⟨y, hx⟩
         | succ k => exact hbefore k (Nat.lt_of_succ_lt_succ hk)
 
+/-- A failed map fails with its error on one of its inputs. -/
+theorem exists_mem_of_mapM_error {xs : List α} {e : ε} (h : xs.mapM f = .error e) :
+    ∃ x ∈ xs, f x = .error e := by
+  obtain ⟨i, inside, entry, -⟩ := mapM_error h
+  exact ⟨_, List.getElem_mem inside, entry⟩
+
 /-- A computation with its error mapped succeeds with a value exactly when the computation does. -/
 theorem mapError_ok_iff {ε' : Type} {g : ε → ε'} {result : Except ε α} {value : α} :
     result.mapError g = .ok value ↔ result = .ok value := by

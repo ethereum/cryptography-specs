@@ -1815,6 +1815,33 @@ theorem getBlockRootAtSlot_ok_iff {state : BeaconState preset fork}
     obtain ⟨_, thrown, _⟩ := computed
     cases thrown
 
+/-- A read of a recorded root fails only for a slot out of range.
+
+It needs the slot of the state plus the length of the buffer of roots to be at most `2^64`. -/
+theorem getBlockRootAtSlot_error {state : BeaconState preset fork} {slot : Slot}
+    {fault : AccessorError}
+    (room : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat ≤ 2 ^ 64)
+    (failed : getBlockRootAtSlot state slot = .error fault) :
+    fault = .slotOutOfRange slot state.slot := by
+  unfold getBlockRootAtSlot at failed
+  by_cases before : slot < state.slot
+  · -- The bound of a slot before the state fits, so only the range checks can fail.
+    have bound : Uint64.addChecked slot preset.SLOTS_PER_HISTORICAL_ROOT =
+        .ok (slot + preset.SLOTS_PER_HISTORICAL_ROOT) :=
+      Uint64.addChecked_of_lt (by have := UInt64.lt_iff_toNat_lt.mp before; omega)
+    by_cases within : state.slot ≤ slot + preset.SLOTS_PER_HISTORICAL_ROOT
+    · have nonzero : preset.SLOTS_PER_HISTORICAL_ROOT ≠ 0 := by
+        intro zero
+        rw [zero, UInt64.add_zero] at within
+        exact absurd before (UInt64.not_lt.mpr within)
+      simp [before, liftArith, bound, within, readCircular, nonzero, Except.mapError, bind,
+        Except.bind] at failed
+    · simp [before, liftArith, bound, within, throw, throwThe, MonadExceptOf.throw,
+        Except.mapError, bind, Except.bind] at failed
+      exact failed.symm
+  · simp [before, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at failed
+    exact failed.symm
+
 /-- A read of a recorded root succeeds when the slot is recent and its bound does not overflow.
 
 The buffer of roots must not be empty. -/
