@@ -259,17 +259,19 @@ The preset and the fork are fixed before the run, and an adversary outputs two b
 The extraction roots both commitments, reads the subtree index of the first blob index as the check does, and climbs both proofs.
 Every hash is an oracle call, and the climbs take the inclusion proof depth of the preset.
 The adversary wins when the sidecars have one index, one body root and different commitments, and both climbs reach that body root.
+Only the forks from Deneb and before Gloas put the commitments in the body, so at the other forks no adversary wins.
+
 `collision_of_extractBlobSidecars` shows that every win leaves two different cached inputs with one answer.
-By `hashTreeRootM_kzgCommitment`, the root of a commitment is one hash of its 48 bytes and 16 zero bytes.
+By `hashTreeRootM_bytes48` (`Serialization/Proofs/Ssz/BranchRandomOracle.lean`), the root of a commitment is one hash of its 48 bytes and 16 zero bytes.
 So equal roots of two different commitments are two such inputs.
 Two different roots that climb to one body root give the inputs that `collision_of_extractBranches` finds.
 `prEvent_experimentWith_le` then gives `prEvent_blobWins_le`, which bounds a win by `Q^2 / N`, and `prEvent_blobWins_le_two_pow` states it with `N = 2^256`.
-`experimentWith_extractBlobSidecars_queryBound` shows that the extraction adds one query per commitment root and at most `2 * depth` for the climbs.
+`extractBlobSidecars_queryBound` shows that the extraction makes one query per commitment root and at most `2 * depth` for the climbs.
+`experimentWith_extractBlobSidecars_queryBound` adds the adversary's queries, through `experimentWith_queryBound`, which the branch bound shares.
 `prEvent_blobWins_le_of_adversary` states the bound with `Q = q + 2 + 2 * depth`, for an adversary that makes at most `q` queries.
 At the mainnet depth of 17, `prEvent_blobWins_le_mainnet` bounds a win by `(q + 36)^2 / 2^256`.
 Beyond the adversary's own queries, `Q` grows with the depth only, not with the blobs or the body.
-With SHA-256 in place of the oracle, `blobWins_sha256_iff` shows that a win is two such sidecars that `verifyBlobSidecarInclusionProof` accepts.
-The step from SHA-256 to the oracle is the idealisation of A4, not a theorem.
+With SHA-256 in place of the oracle, `blobWins_sha256_iff` shows that a win is two such sidecars that `verifyBlobSidecarInclusionProof` accepts, again under the idealisation of A4.
 
 These other branch checks also hash with SHA-256, and no theorem composes their proofs with the branch bound:
 

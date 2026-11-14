@@ -6,35 +6,19 @@ public import EthLib.Serialization.Proofs.Ssz.BranchRandomOracle
 /-!
 # Proofs: two blob sidecars of one index and one body root in the random oracle model
 
-The preset and the fork are fixed before the run.
+An adversary outputs two blob sidecars, for a preset and a fork fixed before the run.
 
-An adversary queries the oracle, then outputs two blob sidecars.
+It wins with one index, one body root and different commitments, if both proofs reach that root.
 
-The experiment roots both KZG commitments, with the oracle as the node hash.
+The experiment climbs both proofs as the inclusion check does, with the oracle as the node hash.
 
-It reads the subtree index from the blob index of the first sidecar, as the inclusion check does.
+A win exposes two different queried messages with one answer, so the birthday bound applies.
 
-Then it climbs both inclusion proofs from their commitment roots at that index, with the oracle.
+A win has probability at most `Q^2 / N`, where `Q` bounds all oracle calls and `N` counts digests.
 
-The climbs take the depth of the inclusion proof, which the preset fixes.
+At the mainnet depth of 17, an adversary of `q` calls gives a bound of `(q + 36)^2 / 2^256`.
 
-The adversary wins when the sidecars have one index, one body root and different commitments.
-
-A win also needs both climbs to reach that body root.
-
-Each win exposes two different queried messages with one answer, so the birthday bound applies.
-
-Equal roots of two different commitments are one answer to their two different messages.
-
-Two different commitment roots that climb to one body root give a collision of the climbs.
-
-A win has probability at most `Q^2 / N`, where `N` is the number of digests.
-
-`Q` bounds the oracle calls of the whole experiment, the adversary's and the extraction's.
-
-An adversary of at most `q` calls gives `Q = q + 2 + 2 * depth`, with `depth` that of the proofs.
-
-At the mainnet depth of 17, a win has probability at most `(q + 36)^2 / 2^256`.
+Only the forks from Deneb and before Gloas put commitments in the body; at others nobody wins.
 
 With SHA-256 as the node hash, a win is two such sidecars that the inclusion check accepts.
 
@@ -50,7 +34,8 @@ namespace EthLib.Consensus
 open Base Serialization.Ssz Serialization.Ssz.RandomOracle
 open OracleComp OracleSpec ENNReal
 open Cryptography.Kzg (KZGCommitment)
-open Cryptography.Merkle.RandomOracle (Collision experimentWith prEvent_experimentWith_le)
+open Cryptography.Merkle.RandomOracle (Collision experimentWith experimentWith_queryBound
+  prEvent_experimentWith_le)
 
 /-- What the blob experiment reports: the two sidecars, and the climbs of their proofs.
 
@@ -101,63 +86,6 @@ def BlobWins {preset : Preset} (outcome : BlobOutcome preset) : Prop :=
       climbs.firstRoot = .ok outcome.first.signedBlockHeader.message.bodyRoot ∧
       climbs.secondRoot = .ok outcome.second.signedBlockHeader.message.bodyRoot
 
-/-- The 48 bytes of a commitment and 16 zero bytes form its two packed nodes. -/
-private theorem packBytes_kzgCommitment (commitment : KZGCommitment) :
-    padded zeroChunk (Serialization.Ssz.packBytes commitment.toArray) 0 ++
-        padded zeroChunk (Serialization.Ssz.packBytes commitment.toArray) 1 =
-      commitment.toArray ++ Array.replicate 16 0 := by
-  have size : commitment.toArray.size = 48 := commitment.size_toArray
-  simp [padded, Serialization.Ssz.packBytes, size, bytesPerChunk, ← Array.append_assoc,
-    Array.extract_append_extract, Array.extract_eq_self_of_le]
-
-/-- A perfect tree of depth 1 over two nodes is one hash of the two nodes, with any hasher. -/
-private theorem subtreeAtM_two {m : Type → Type} [Monad m] [LawfulMonad m] (hasher : Hasher m)
-    {chunks : Array Bytes} (count : chunks.size = 2) :
-    subtreeAtM hasher chunks 1 0 =
-      combineM hasher.hash (padded zeroChunk chunks 0) (padded zeroChunk chunks 1) := by
-  simp only [subtreeAtM, count]
-  simp
-
-/-- The root of a commitment is one hash of its 48 bytes and 16 zero bytes.
-
-It holds for a hasher in any lawful monad. -/
-theorem hashTreeRootM_kzgCommitment {m : Type → Type} [Monad m] [LawfulMonad m]
-    (hasher : Hasher m) (commitment : KZGCommitment) :
-    (hashTreeRootM hasher (SszType.desc KZGCommitment) (SszType.toValue commitment)).run = (do
-      return .ok (← hasher.hash ⟨commitment.toArray ++ Array.replicate 16 0⟩).data) := by
-  have size : commitment.toArray.size = 48 := commitment.size_toArray
-  have count : (Serialization.Ssz.packBytes commitment.toArray).size = 2 := by
-    simp [size, bytesPerChunk]
-  show (hashTreeRootAtM hasher 1 (.byteVector 48) (.bytes commitment.toArray)).run = _
-  simp only [hashTreeRootAtM, merkleLayout, size, bne_self_eq_false, Bool.false_eq_true,
-    ↓reduceIte, liftM_pure, pure_bind]
-  simp only [layoutChunksAtM, MerkleLayout.packing, Option.getD_none, Leaves.count,
-    Array.extract_size, pure_bind, bind_pure, merkleizeBoundedUncheckedM, Nat.lt_irrefl,
-    ↓reduceIte, ExceptT.run_lift]
-  rw [count, show depthFor 2 = 1 from depthFor_pow 1, subtreeAtM_two hasher count, combineM,
-    packBytes_kzgCommitment]
-  simp only [map_bind, map_pure]
-
-/-- A replayed commitment root caches its message, and is the answer of the table to it.
-
-It needs the table to agree with the cache. -/
-private theorem cached_of_hashTreeRootM_kzgCommitment {cache : HashOracle.QueryCache}
-    {f : QueryImpl HashOracle Id} (hf : cache.AgreesWithFn f) {commitment : KZGCommitment}
-    {root : Except Err Bytes}
-    (hrun : simulateQ cache.toPartialImpl (hashTreeRootM (Hasher.ofHash queryHash)
-      (SszType.desc KZGCommitment) (SszType.toValue commitment)).run = some root) :
-    cache ⟨commitment.toArray ++ Array.replicate 16 0⟩ =
-        some (f ⟨commitment.toArray ++ Array.replicate 16 0⟩) ∧
-      root = .ok (tableHash f ⟨commitment.toArray ++ Array.replicate 16 0⟩).data := by
-  have heval := cache.evalWithAnswerFn_eq_of_agreesWithFn hf _ hrun
-  rw [hashTreeRootM_kzgCommitment] at hrun heval
-  simp only [Hasher.ofHash, evalWithAnswerFn_bind, evalWithAnswerFn_queryHash,
-    evalWithAnswerFn_pure] at heval
-  simp only [Hasher.ofHash, simulateQ_bind] at hrun
-  obtain ⟨_, hquery, -⟩ := Option.bind_eq_some_iff.mp hrun
-  obtain ⟨digest, hdigest⟩ := cached_of_queryHash hquery
-  exact ⟨by rw [hdigest, hf hdigest], heval.symm⟩
-
 /-- A replayed winning blob extraction exposes a collision of the cache.
 
 Two different commitments with one root give two different messages with one answer.
@@ -182,21 +110,22 @@ theorem collision_of_extractBlobSidecars {preset : Preset} {fork : Fork}
   obtain ⟨-, sameRoot, differ, climbed, present, firstClimbed, secondClimbed⟩ := hwins
   dsimp only at sameRoot differ present firstClimbed secondClimbed
   subst present
-  obtain ⟨firstCached, rfl⟩ := cached_of_hashTreeRootM_kzgCommitment hf hfirst
-  obtain ⟨secondCached, rfl⟩ := cached_of_hashTreeRootM_kzgCommitment hf hsecond
+  obtain ⟨firstCached, rfl⟩ := cached_of_hashTreeRootM_bytes48 hf hfirst
+  obtain ⟨secondCached, rfl⟩ := cached_of_hashTreeRootM_bytes48 hf hsecond
   split at hclimbs
   · rename_i index firstLeaf secondLeaf _ hfirstLeaf hsecondLeaf
     simp only [simulateQ_bind, simulateQ_pure] at hclimbs
     obtain ⟨_, hbranches, hclimbs⟩ := Option.bind_eq_some_iff.mp hclimbs
     cases hclimbs
     simp only [bind, Except.bind, toChunk_ok_iff] at hfirstLeaf hsecondLeaf
+    -- The root of a commitment is one hash, so no rehash of the general extraction is needed.
     by_cases sameLeaf : firstLeaf = secondLeaf
     · -- One root of two different commitments is one answer to two different messages.
       subst sameLeaf
       refine collision_of_cached (fun same => differ ?_) ?_ firstCached secondCached
       · exact Vector.toArray_inj.mp ((Array.append_left_inj _).mp same)
       · exact congrArg ByteArray.mk (hfirstLeaf.trans hsecondLeaf.symm)
-    · -- Two different roots climb to one body root, so the search over the climbs finds one.
+    · -- Two different roots climb to one body root, so the search finds a collision of the climbs.
       have hout := cache.evalWithAnswerFn_eq_of_agreesWithFn hf _ hbranches
       simp only [extractBranches, evalWithAnswerFn_bind, evalWithAnswerFn_climbBranchM,
         evalWithAnswerFn_pure] at hout
@@ -206,13 +135,6 @@ theorem collision_of_extractBlobSidecars {preset : Preset} {fork : Fork}
   · simp only [simulateQ_pure] at hclimbs
     cases hclimbs
 
-/-- The root of a commitment makes one oracle call. -/
-private theorem hashTreeRootM_kzgCommitment_queryBound (commitment : KZGCommitment) :
-    IsQueryBoundP (hashTreeRootM (Hasher.ofHash queryHash) (SszType.desc KZGCommitment)
-      (SszType.toValue commitment)).run (fun _ => True) 1 := by
-  rw [hashTreeRootM_kzgCommitment]
-  simp [Hasher.ofHash, queryHash]
-
 /-- The extraction makes at most `2 + 2 * depth` oracle calls, with `depth` that of the proofs.
 
 It makes one call per commitment root, and climbs at most `depth` nodes of each proof. -/
@@ -221,8 +143,8 @@ theorem extractBlobSidecars_queryBound (preset : Preset) (fork : Fork)
     IsQueryBoundP (extractBlobSidecars queryHash preset fork claim) (fun _ => True)
       (2 + 2 * preset.KZG_COMMITMENT_INCLUSION_PROOF_DEPTH.toNat) := by
   unfold extractBlobSidecars
-  refine (isQueryBoundP_bind (hashTreeRootM_kzgCommitment_queryBound _) fun _ _ =>
-    isQueryBoundP_bind (hashTreeRootM_kzgCommitment_queryBound _) fun _ _ =>
+  refine (isQueryBoundP_bind (hashTreeRootM_bytes48_queryBound _) fun _ _ =>
+    isQueryBoundP_bind (hashTreeRootM_bytes48_queryBound _) fun _ _ =>
       isQueryBoundP_bind (n := 2 * preset.KZG_COMMITMENT_INCLUSION_PROOF_DEPTH.toNat) (m := 0) ?_
         fun _ _ => isQueryBoundP_pure _ _ 0).mono (by omega)
   split
@@ -241,25 +163,15 @@ theorem experimentWith_extractBlobSidecars_queryBound (preset : Preset) (fork : 
     IsQueryBoundP (experimentWith (extractBlobSidecars queryHash preset fork) adversary)
       (fun t => t.isRight = true)
       (q + 2 + 2 * preset.KZG_COMMITMENT_INCLUSION_PROOF_DEPTH.toNat) :=
-  (isQueryBoundP_bind hq fun claim _ => IsQueryBoundP.liftComp_subSpec
-    (fun _ => iff_of_true trivial rfl) (extractBlobSidecars_queryBound preset fork claim)).mono
-    (by omega)
+  (experimentWith_queryBound hq (extractBlobSidecars_queryBound preset fork)).mono (by omega)
 
 /-- An adversary that outputs two blob sidecars wins with probability at most `Q^2 / N`.
 
-It wins when the sidecars have one index, one body root and different commitments.
+A win is one index, one body root, different commitments, and both proofs climbing to that root.
 
-A win also needs both proofs to climb from their commitment roots to that body root.
+`Q` bounds the oracle calls of the whole experiment, repeats included, and `N` counts digests.
 
-The roots are computed with the oracle as the node hash, and `N` is the number of digests.
-
-It needs `Q` to bound the oracle calls of the whole experiment, repeats included.
-
-The extraction adds one call per commitment root and at most one per climbed node.
-
-The oracle cache starts empty, and the adversary's private sampling is not counted.
-
-It holds for every preset and fork. -/
+The oracle cache starts empty, and the adversary's private sampling is not counted. -/
 theorem prEvent_blobWins_le [SampleableType Hash32] (preset : Preset) (fork : Fork)
     (adversary : OracleComp (unifSpec + HashOracle) (BlobSidecar preset × BlobSidecar preset))
     {Q : Nat}
@@ -311,7 +223,7 @@ theorem prEvent_blobWins_le_mainnet (fork : Fork)
         BlobWins z.1] ≤ (q + 36 : Nat) * (((q + 36 : Nat) : ℝ≥0∞) / 2 ^ 256) :=
   prEvent_blobWins_le_of_adversary .mainnet fork adversary hq
 
-/-- With SHA-256 in the identity monad, the extraction reads the commitment roots of the spec. -/
+/-- With SHA-256, the extraction roots each commitment and reads the index as the spec does. -/
 theorem extractBlobSidecars_sha256 (preset : Preset) (fork : Fork)
     (claim : BlobSidecar preset × BlobSidecar preset) :
     (extractBlobSidecars (m := Id) Cryptography.Hash.Sha256.hash preset fork claim).run =
