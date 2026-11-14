@@ -4,6 +4,7 @@ public import EthLib.Consensus.Proofs.Accessors
 public import EthLib.Consensus.Proofs.Accessors.Draw
 public import EthLib.Consensus.Proofs.Accessors.DrawProbability
 public import EthLib.Consensus.Proofs.Accessors.DrawRandomOracle
+public import EthLib.Consensus.Proofs.Accessors.SearchRandomOracle
 public import EthLib.Consensus.Proofs.BeaconApi.Blocks
 public import EthLib.Consensus.Proofs.BeaconApi.Committees
 public import EthLib.Consensus.Proofs.BeaconApi.ChainEvents

@@ -2877,8 +2877,26 @@ With the cached random oracle, a draw whose hashed input is absent from the star
 These probabilities hold in the random-oracle model only; no theorem bounds the draw when SHA-256 answers.
 The seed is fixed, and other inputs may already be cached.
 For two distinct inputs absent from that cache, `prEvent_queryProposerDraw_pair_of_fresh` gives the product of their acceptance probabilities for uniform digests.
-No theorem yet gives that product for draws that read different bytes of one digest, or for the whole search.
+`prEvent_queryDraws_of_before_pectra` and `prEvent_queryDraws_of_pectra` give the product law for the first draws of one seed, including draws that read different bytes of one digest.
+They assume that no draw input of the seed is in the starting cache.
 Seed derivation, including a seed chosen after the oracle answers are seen, is not part of this model.
+
+`Consensus/Proofs/Accessors/SearchRandomOracle.lean` exposes the hash calls of the search of a balance-weighted selection as `querySearch`.
+Answering them with SHA-256 gives `balanceWeightedSearch`, by `evalWithAnswerFn_querySearch`.
+The oracle search makes all `2^64` draws of the seed, then searches on their verdicts.
+`prEvent_querySearch_fails_le` bounds the probability that the search fails, for `n` members.
+The bound is `n * (1 - 2^-b)^k`, with `k` the floor of `(2^64 - 1) / n`.
+It needs no validator at the cap: each balance at most the cap is accepted with probability at least `2^-b`.
+It assumes a positive cap, at least one candidate and balances at most the cap.
+It also assumes that the products of a draw fit in 64 bits, and that no draw input of the seed is in the starting cache.
+`prEvent_querySearch_fails_le_of_size_le` gives at most `2^-128` for at most `2^32` members.
+The bounds model the hash as an ideal random oracle; no theorem gives them for SHA-256.
+The bound is for one search whose seed, candidates, balances and order are fixed before the draws are answered.
+A bound over a whole run would sum the bounds of its searches, and needs each draw input to be fresh.
+A draw input and the seed input of a slot both hash 40 bytes.
+So the input of one search may be the seed input of another slot.
+The oracle search also leaves every draw input of its seed in the cache, not only those a search reads.
+A bound over a run then needs a collision term, or an argument that those inputs differ, and no theorem gives one.
 
 ### Honest validator duties
 
