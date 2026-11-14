@@ -816,10 +816,22 @@ The trailing zero bits of a named bit list (X.690 §11.2.2) are not checked, sin
 The reader takes a scalar value to be at most 10FFFF and outside D800 to DFFF.
 X.690 also forbids a leading signature and some control functions (§§8.23.7 to 8.23.9), which the reader does not check.
 A BMPString may also hold FFFE or FFFF, which X.680 §41.15 leaves out of its character set.
-`validate_go_boolean_ok_iff`, `validate_go_bitString`, `validate_go_bmpString_ok_iff` and `validate_go_universalString_ok_iff` state what validation accepts for one value of these tags, for any positive fuel; no theorem shows that each nested value receives it.
+`validate_go_boolean_ok_iff`, `validate_go_bitString`, `validate_go_bmpString_ok_iff` and `validate_go_universalString_ok_iff` state what validation accepts for one value of these tags, for any positive fuel.
 `validate_boolean_ok_iff`, `validate_bitString`, `validate_bmpString_ok_iff` and `validate_universalString_ok_iff` give the same at the top, as the certificate reader validates each Name attribute value and each algorithm parameter.
-No theorem states the validation of INTEGER, OCTET STRING, OBJECT IDENTIFIER, NULL, UTF8String, PrintableString or IA5String, nor the rejection of every other tag.
-No theorem states the validation of a SEQUENCE or a SET OF, its order or its children.
+`oid_ok_iff` states that an OBJECT IDENTIFIER reads as its content exactly when that content is one or more subidentifiers (X.690 §8.19.2).
+Each subidentifier has bit 8 set on every octet but the last, and a first octet other than 80, so it takes the fewest octets.
+The reader does not check the two arcs that the first subidentifier combines, since every value of it names a valid pair.
+`validate_oid_ok_iff`, `validate_null_ok_iff`, `validate_utf8String_ok_iff` and `validate_printableString_ok_iff` state what validation accepts for these tags.
+A NULL is empty, and a UTF8String is the UTF-8 encoding of some characters.
+A PrintableString holds the letters, digits, space and `'()+,-./:=?` of X.680 §41.4.
+`validate_eq_error_tag` states that a value of every tag outside the subset fails with a tag error.
+`validate_sequence_ok_iff` and `validate_set_ok_iff` state that a SEQUENCE or a SET OF passes exactly when its content reads as values that each pass.
+A SET OF also needs the encodings of those values in ascending order, compared octet by octet (X.690 §11.6).
+Both hold for a value whose encoding is longer than its content.
+Every value that the reader returns is one (`size_lt_of_read_ok`, `children_go_sizes`).
+The comparison puts a proper prefix first, where X.690 pads the shorter encoding with zero octets.
+No theorem states that one sibling encoding is never a proper prefix of another.
+No theorem states the validation of INTEGER, OCTET STRING or IA5String.
 Nothing in Lean shows that authentication can succeed; the Python tests check vectors 1 to 4 of libp2p TLS.
 
 ### QUIC wire encodings
