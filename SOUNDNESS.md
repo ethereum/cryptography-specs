@@ -5563,7 +5563,15 @@ From a balance of 2048 ETH and a score of zero, the inactivity penalties alone t
 Even a balance of 36 million ETH falls below within about `7.7 * 10^5` epochs.
 Before Electra the cap is 32 ETH, so a balance far above it can keep the effective balance at the cap past the horizon; from Electra the cap is 2048 ETH and the leak exhausts any balance within the supply bound.
 So from Electra the runs that meet `DrawsAtCap` are far shorter than the horizon, and the mainnet theorem says nothing for longer runs.
-`processSlotsAcross_exists_ok_emptyGenesisState` shows that the hypotheses can hold together, but only with an empty registry before Altair; no witness yet covers a run from Altair.
+`processSlotsAcross_exists_ok_emptyGenesisState` shows that the hypotheses can hold together with an empty registry before Altair.
+`runHypotheses_of_quiet_altair` (`Proofs/Transition/Totality/RunFromAltair.lean`) gives the three hypotheses for a run from Altair that ends before the Electra fork epoch.
+It needs a state where no one has voted, every key is valid, every inactivity score is bounded, and one validator at the cap has a balance that covers the leak.
+The preset must also have aligned caps, a cap above the ejection balance and positive inactivity quotients, which mainnet has.
+`processSlotsAcross_exists_ok_altairWitnessState` (`Proofs/Transition/Totality/AltairWitness.lean`) applies it to a mainnet state at the Altair fork epoch with one validator of `10^5` ETH.
+Every slot advance from that state up to the last slot before the Electra fork epoch succeeds, across 289791 epoch boundaries and 1131 sync committee draws.
+The leak and the missed-vote penalties take at most about `9.886 * 10^4` ETH in that time, so the effective balance stays at 32 ETH.
+The witness is a valid state under the mainnet preset, but no mainnet genesis leads to it: it has one validator and no history.
+No witness yet covers a run across the Electra fork epoch.
 Without a validator at the cap, whether a draw ends depends on the hashes; a theorem without `DrawsAtCap` would need a model of the hash, such as a random oracle.
 
 Whatever those hypotheses leave unproved is part of what a reader trusts.
