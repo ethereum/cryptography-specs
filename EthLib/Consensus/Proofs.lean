@@ -16,6 +16,7 @@ public import EthLib.Consensus.Proofs.BeaconApi.Events
 public import EthLib.Consensus.Proofs.BeaconApi.Identifiers
 public import EthLib.Consensus.Proofs.BeaconApi.LightClient
 public import EthLib.Consensus.Proofs.BeaconApi.LightClientBootstrap
+public import EthLib.Consensus.Proofs.BeaconApi.LightClientBootstrapReachable
 public import EthLib.Consensus.Proofs.BeaconApi.ObjectEvents
 public import EthLib.Consensus.Proofs.BeaconApi.Produce
 public import EthLib.Consensus.Proofs.BeaconApi.Publish

@@ -4359,7 +4359,8 @@ A path names a state, a block or a validator by an identifier (`Consensus/Beacon
 `isFinalizedRoot_of_slot_le` shows that a block of the chain of a head, at or below the finalized block of that chain, is reported finalized.
 `parseUInt64_print_of_some` shows that a slot or an index reads only from its plain decimal text, so a sign or a leading zero is refused.
 A state root names the state after the block whose `state_root` field it is.
-That rests on the store, which checks the field of each block that it imports and of its anchor; no theorem states it.
+That rests on the store, which checks the field of each block that it imports and of its anchor.
+`stateRoot_blockStates` and `stateRoot_resolveStateId_root` state it for a store that the handlers reach.
 The Python suite (`bindings/python/tests/consensus/test_beacon_api_identifiers.py`) checks the resolvers against a Capella fork choice vector of the minimal preset, not by a proof.
 The `execution_optimistic` flag reads the optimistic store; nothing exports or tests it.
 
@@ -4602,10 +4603,20 @@ The issue's single matching and validity theorems are split by fork; from Electr
 The light client answers are in `Consensus/BeaconApi/LightClient.lean`: the bootstrap of a block, the updates of a range of periods, and the latest finality and optimistic updates.
 `bootstrapFor_valid` (`Consensus/Proofs/BeaconApi/LightClientBootstrap.lean`) shows that a bootstrap the node serves for a block starts a light client that trusts that block.
 It assumes that the store holds the block under its root and the post state that the block names.
-These two facts are what the store checks when it takes a block, but no theorem on the fork choice proves them yet.
 It also assumes that the schedule puts the forks from Capella to Heze in order.
 It assumes a lawful state type and a preset whose sizes in the block and the state are nonzero.
 The answer itself refuses a block whose fork is not the fork that the schedule gives at its slot.
+
+`bootstrapFor_valid_of_reachable` (`Consensus/Proofs/BeaconApi/LightClientBootstrapReachable.lean`) shows the same for a store that the handlers reach from an anchor that the fork choice accepts, with no other assumption on the store.
+It keeps the assumptions on the schedule, the state type and the preset.
+Its proof reads `Store.Reachable.root`, which shows that each known block has its own root as its key.
+The proof also reads `stateRoot_blockStates`, which shows that the state kept under that root has the state root of the block.
+
+The handlers of `Store.Reachable` leave out `onInvalidPayload`, which runs when the execution layer finds a payload invalid.
+From Heze they also leave out `Store.recordValidatedInclusionListSatisfaction`, which records whether a payload that turns valid satisfies its inclusion lists.
+The first step removes a block only together with its state, and the second touches neither the blocks nor the states.
+So both keep the two facts that the proof reads.
+No theorem states that yet, so after either step only `bootstrapFor_valid` applies, with its assumptions on the store.
 
 `bootstrapFor_error` shows that each refusal of the bootstrap is the error with code 404 that names the root, and `bootstrapFor_error_code` gives the code.
 The file `apis/beacon/light_client/bootstrap.yaml` of release `v5.0.0-beta.0` lists that code when "`LightClientBootstrap` instance cannot be produced for the given block root".
