@@ -240,6 +240,7 @@ public import EthLib.Consensus.Proofs.Transition.TargetPending
 public import EthLib.Consensus.Proofs.Transition.TargetSlots
 public import EthLib.Consensus.Proofs.Transition.TargetUpgrades
 public import EthLib.Consensus.Proofs.Transition.TargetVotes
+public import EthLib.Consensus.Proofs.Transition.Totality.AltairWitness
 public import EthLib.Consensus.Proofs.Transition.Totality.AtCap
 public import EthLib.Consensus.Proofs.Transition.Totality.Bound
 public import EthLib.Consensus.Proofs.Transition.Totality.BuilderPayments
@@ -270,6 +271,7 @@ public import EthLib.Consensus.Proofs.Transition.Totality.RewardsBeforeAltair
 public import EthLib.Consensus.Proofs.Transition.Totality.Run
 public import EthLib.Consensus.Proofs.Transition.Totality.RunBounds
 public import EthLib.Consensus.Proofs.Transition.Totality.RunHypotheses
+public import EthLib.Consensus.Proofs.Transition.Totality.RunFromAltair
 public import EthLib.Consensus.Proofs.Transition.Totality.RunStep
 public import EthLib.Consensus.Proofs.Transition.Totality.RunUpgrades
 public import EthLib.Consensus.Proofs.Transition.Totality.Shape
