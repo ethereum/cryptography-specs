@@ -440,14 +440,26 @@ private theorem CapStep.attesterSlashing {f : Fork} {s t : BeaconState preset f}
 
 private theorem CapStep.block {f : Fork} {s t : BeaconState preset f}
     {engine : ExecutionEngine preset f} {block : BeaconBlock preset f}
-    (early : f < .glamsterdam)
     (order : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
     (ok : processBlock config checks engine s block = .ok t) : CapStep s t := by
   have same {a b : BeaconState preset f} (validators : b.validators = a.validators) :
       CapStep a b :=
     CapStep.data (congrArg (·.data) validators)
   obtain ⟨input, last, started, operated, -, synced⟩ := processBlock_operationsInput ok
-  have head : CapStep s input := same (started.validators_eq early)
+  -- From Gloas, a block first applies the payload of the parent, which runs the validator requests.
+  have head : CapStep s input :=
+    started.step_of CapStep CapStep.refl (fun one two => one.trans two)
+      (fun _ paid => processParentExecutionPayload_step_of CapStep CapStep.refl
+        (fun one two => one.trans two) (fun _ validators => same validators)
+        CapStep.withdrawalRequest (CapStep.consolidationRequest order) paid)
+      (fun headed => same (by obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headed; rfl))
+      (fun _ executed => same (processBlockExecution_validators executed))
+      (fun revealed => same (by
+        obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq revealed
+        rfl))
+      (fun _ voted => same (by
+        obtain ⟨_, _, rest⟩ := processEth1Data_eq voted
+        rw [← rest]))
   obtain ⟨_, _, _, proposersOk, slashingsOk, attestedOk, rest⟩ :=
     processOperations_folds_of CapStep CapStep.refl (fun one two => one.trans two)
       CapStep.processDeposit (fun exited => CapStep.exit (processVoluntaryExit_initiates exited))
@@ -601,7 +613,7 @@ private theorem CapStep.step {s t : ForkedBeaconState preset}
     (early : t.fork < .glamsterdam) : CapStep s.state t.state := by
   cases step with
   | block engine signed due ok =>
-    exact CapStep.block early compounding (applySignedBlock_ok ok).2.1
+    exact CapStep.block compounding (applySignedBlock_ok ok).2.1
   | slot ok =>
     obtain ⟨advanced, slotOk, upgrades⟩ := bind_ok_iff.mp ok
     exact (CapStep.slot slotOk).trans
@@ -666,6 +678,18 @@ theorem advanceSlot_capped {f : Fork} {s t : BeaconState preset f}
     (ok : advanceSlot config checks s = .ok t) (capped : EffectiveBalancesCapped s) :
     EffectiveBalancesCapped t :=
   (CapStep.slot ok).capped capped
+
+/-- A block keeps each effective balance at most the largest one of its validator, at every fork.
+
+The activation balance must be at most the cap of compounding credentials.
+
+Then a switch to compounding credentials never lowers a cap. -/
+theorem processBlock_capped {f : Fork} {s t : BeaconState preset f}
+    {engine : ExecutionEngine preset f} {block : BeaconBlock preset f}
+    (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (ok : processBlock config checks engine s block = .ok t) (capped : EffectiveBalancesCapped s) :
+    EffectiveBalancesCapped t :=
+  (CapStep.block compounding ok).capped capped
 
 /-- The upgrade to the next fork keeps each effective balance at most the cap of its validator.
 
