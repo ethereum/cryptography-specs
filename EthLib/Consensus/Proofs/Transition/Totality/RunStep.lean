@@ -56,10 +56,16 @@ structure RunConditions (preset : Preset) (config : Config) (start : RunStart)
   draws : ∀ fork, DrawFits preset fork
   /-- The shortest seed lookahead is shorter than the history of mixes. -/
   lookahead : preset.MIN_SEED_LOOKAHEAD.toNat < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat
+  /-- The shortest seed lookahead plus two epochs is shorter than the history of mixes.
+
+  A slot then keeps the committees of the pending attestations. -/
+  apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat
   /-- A sync committee has members. -/
   members : preset.SYNC_COMMITTEE_SIZE ≠ 0
   /-- The largest effective balances are whole numbers of increments. -/
   aligned : MaxEffectiveBalancesAligned preset
+  /-- The cap before Electra is at most the least balance to activate. -/
+  activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE
   /-- The least balance to activate is at most the cap of a compounding validator. -/
   compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA
   /-- The least churn is at least one increment. -/
@@ -170,7 +176,7 @@ private theorem RunBounded.supply_le_of_le (holds : RunBounded config start budg
   holds.supply.trans (Nat.add_le_add_left (Nat.mul_le_mul_right _ le) _)
 
 /-- Up to the last epoch, the sum of the effective balances is at most the budget. -/
-private theorem RunBounded.effective_le (holds : RunBounded config start budget elapsed state)
+theorem RunBounded.effective_le (holds : RunBounded config start budget elapsed state)
     (conditions : RunConditions preset config start budget epochs lastEpoch)
     (le : elapsed ≤ epochs) : effectiveBalanceSum state ≤ budget := by
   rcases holds.effective with low | ratio
@@ -662,14 +668,28 @@ theorem UpgradeReady.of_run {start : RunStart} {budget epochs lastEpoch elapsed 
   | glamsterdam => exact draws
   | _ => simp [upgradeDue, Config.nextFork] at due
 
+/-- The bounds at the start of a run on mainnet, from a given epoch.
+
+They are 36 million ETH of balances and pending deposits, and as much of effective balances.
+
+The registry load is at most `2^22`, and every score is zero.
+
+The history has at most `2^20` entries.
+
+The end of the exit queue and every exit epoch set are at most `2^20` epochs past the given one.
+
+The carried churns and the slashed balances are each at most 36 million ETH. -/
+def RunStart.mainnet (startEpoch : Nat) : RunStart :=
+  { supply := 36 * 10 ^ 15, effective := 36 * 10 ^ 15, load := 2 ^ 22, scores := 0,
+    ceiling := startEpoch + 2 ^ 20, history := 2 ^ 20, depositChurn := 36 * 10 ^ 15,
+    exitChurn := 36 * 10 ^ 15, slashed := 36 * 10 ^ 15 }
+
 /-- On mainnet the conditions hold for a supply of 36 million ETH and a budget of `2^57` Gwei.
 
-The run crosses `2.25 * 10^6` epochs, from epoch `4 * 10^5`. -/
-theorem runConditions_mainnet :
-    RunConditions Preset.mainnet Config.mainnet
-      { supply := 36 * 10 ^ 15, effective := 36 * 10 ^ 15, load := 2 ^ 22, scores := 0,
-        ceiling := 400005, history := 2 ^ 20, depositChurn := 0, exitChurn := 0, slashed := 0 }
-      (2 ^ 57) 2250000 2650000 := by
+The run crosses `2.25 * 10^6` epochs, from any epoch up to `2^40`. -/
+theorem runConditions_mainnet {startEpoch : Nat} (early : startEpoch ≤ 2 ^ 40) :
+    RunConditions Preset.mainnet Config.mainnet (RunStart.mainnet startEpoch) (2 ^ 57) 2250000
+      (startEpoch + 2250000) := by
   have root : Nat.sqrt (2 ^ 57) = 379625062 := (Nat.eq_sqrt.mpr ⟨by decide, by decide⟩).symm
   have fitBefore := rewardsFitBeforeAltair_mainnet
   exact {
@@ -680,37 +700,68 @@ theorem runConditions_mainnet :
     hysteresis := by decide
     draws := fun fork => (drawFits_presets fork).1
     lookahead := seedLookahead_lt_presets.1
+    apart := by decide
     members := syncCommitteeSize_ne_zero_presets.1
     aligned := maxEffectiveBalancesAligned_mainnet
+    activation := by decide
     compounding := by decide
     minimum := by decide
     maximum := by decide
     slots := by decide
-    effectiveStart := by decide
+    effectiveStart := by dsimp only [RunStart.mainnet]; decide
     supplyRatio := by
-      simp only [Preset.epochIssuanceBeforeAltair, root]
+      simp only [Preset.epochIssuanceBeforeAltair, root, RunStart.mainnet]
       decide
     supplyRoom := by
-      simp only [Preset.epochIssuanceBeforeAltair, Preset.epochIssuance, root]
+      simp only [Preset.epochIssuanceBeforeAltair, Preset.epochIssuance, root, RunStart.mainnet]
       decide
     tripled := by decide
     product := by decide
-    fit := rewardsFit_mainnet.of_scoreBound (by decide)
+    fit := rewardsFit_mainnet.of_scoreBound (by dsimp only [RunStart.mainnet]; decide)
     horizon := Preset.horizon_mainnet
     half := rewardsCeiling_mainnet
     fitBefore := ⟨fitBefore.product, fitBefore.rewards,
       Preset.penalties_lt_of_le_epochLimitBeforeAltair le_rfl
         (Nat.lt_of_le_of_lt (Nat.le_add_right _ _) fitBefore.penalties)⟩
     halfBefore := rewardsCeilingBeforeAltair_mainnet
-    firstStart := by decide
-    exitRoom := by decide
-    churnRoom := by decide
-    depositRoom := by decide
-    slashed := fun _ => by simp
-    history := by decide
-    load := by decide
-    loadRoom := by decide
-    slotRoom := by decide
-    epochRoom := by decide }
+    firstStart := by
+      show startEpoch + 2250000 - 2250000 + 1 + Preset.mainnet.MAX_SEED_LOOKAHEAD.toNat ≤
+        startEpoch + 2 ^ 20
+      have a : Preset.mainnet.MAX_SEED_LOOKAHEAD.toNat = 4 := by decide
+      rw [a]
+      omega
+    exitRoom := by
+      have step : (RunStart.mainnet startEpoch).exitStep Preset.mainnet (2 ^ 57) = 148309493 :=
+        by dsimp only [RunStart.exitStep, RunStart.mainnet]; decide
+      show startEpoch + 2 ^ 20 + 2250000 * (RunStart.mainnet startEpoch).exitStep Preset.mainnet
+        (2 ^ 57) + (RunStart.mainnet startEpoch).exitStep Preset.mainnet (2 ^ 57) +
+        Config.mainnet.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat + 1 < 2 ^ 64 - 1
+      rw [step]
+      have delay : Config.mainnet.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat = 256 := by decide
+      omega
+    churnRoom := by dsimp only [RunStart.mainnet]; decide
+    depositRoom := by dsimp only [RunStart.mainnet]; decide
+    slashed := fun fork => by dsimp only [RunStart.mainnet]; cases fork <;> decide
+    history := by dsimp only [RunStart.mainnet]; decide
+    load := by dsimp only [RunStart.mainnet]; decide
+    loadRoom := by dsimp only [RunStart.mainnet]; decide
+    slotRoom := by
+      have a : Preset.mainnet.MIN_SEED_LOOKAHEAD.toNat = 1 := by decide
+      have b : Preset.mainnet.SLOTS_PER_EPOCH.toNat = 32 := by decide
+      have c : Preset.mainnet.SLOTS_PER_HISTORICAL_ROOT.toNat = 8192 := by decide
+      show (startEpoch + 2250000 + Preset.mainnet.MIN_SEED_LOOKAHEAD.toNat + 2) *
+        Preset.mainnet.SLOTS_PER_EPOCH.toNat + Preset.mainnet.SLOTS_PER_HISTORICAL_ROOT.toNat <
+          2 ^ 64
+      rw [a, b, c]
+      omega
+    epochRoom := by
+      have a : Preset.mainnet.MIN_SEED_LOOKAHEAD.toNat = 1 := by decide
+      have d : Preset.mainnet.EPOCHS_PER_HISTORICAL_VECTOR.toNat = 65536 := by decide
+      have e : Preset.mainnet.EPOCHS_PER_SLASHINGS_VECTOR.toNat = 8192 := by decide
+      show startEpoch + 2250000 + Preset.mainnet.MIN_SEED_LOOKAHEAD.toNat + 1 +
+        Preset.mainnet.EPOCHS_PER_HISTORICAL_VECTOR.toNat +
+          Preset.mainnet.EPOCHS_PER_SLASHINGS_VECTOR.toNat < 2 ^ 64
+      rw [a, d, e]
+      omega }
 
 end EthLib.Consensus
