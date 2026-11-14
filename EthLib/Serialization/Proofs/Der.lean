@@ -20,6 +20,8 @@ The reader is stated against X.690 itself, in terms of octets and numbers.
 - The BIT STRING reader accepts only an octet-aligned value: the octet 0, then its octets.
 - BIT STRING contents count at most 7 unused bits, all zero, and none when no octet follows.
 - BMPString and UniversalString pass when they write Unicode scalar values, two or four octets each.
+- An OBJECT IDENTIFIER is one or more subidentifiers, each on the fewest base-128 octets.
+- A SEQUENCE passes validation when each value it holds passes, and a SET OF also needs them sorted.
 -/
 
 @[expose] public section
@@ -754,6 +756,197 @@ theorem fixedString_eq_true_iff {width : Nat} (pos : 0 < width) {bytes : List UI
   rw [fixedString_eq, finish_foldl_iff pos]
   simp
 
+/-! ## OBJECT IDENTIFIER -/
+
+/-- One step of the subidentifier check: reject a leading 80, then note whether one ends here. -/
+private def oidStep (atStart : Bool) (byte : UInt8) : Except Error Bool := do
+  if atStart ∧ byte = 128 then throw .value
+  return byte.toNat < 128
+
+/-- The check of a content is the fold of one step from the start of a subidentifier. -/
+private theorem oid_eq (value : Value) : oid value = (do
+    if value.tag != 6 then throw .tag
+    if value.content.isEmpty then throw .value
+    let atStart ← value.content.data.toList.foldlM oidStep true
+    if atStart then return value.content else throw .value) := rfl
+
+/-- Octets that end a subidentifier: bit 8 set on each but the last, clear on the last. -/
+private def Tail (p : List UInt8) : Prop :=
+  ∃ init last, p = init ++ [last] ∧ (∀ b ∈ init, 0x80 ≤ b.toNat) ∧ last.toNat < 0x80
+
+/-- A subidentifier also has a first octet other than 80, so it is on the fewest octets. -/
+private def Sub (p : List UInt8) : Prop := p.head? ≠ some 0x80 ∧ Tail p
+
+/-- The octets that end a subidentifier are never empty. -/
+private theorem tail_ne_nil {p : List UInt8} (h : Tail p) : p ≠ [] := by
+  obtain ⟨init, last, rfl, -, -⟩ := h
+  simp
+
+/-- An octet that ends a subidentifier has bit 8 clear, and any other has it set. -/
+private theorem tail_cons_iff (x : UInt8) (r : List UInt8) :
+    Tail (x :: r) ↔ (r = [] ∧ x.toNat < 0x80) ∨ (0x80 ≤ x.toNat ∧ Tail r) := by
+  constructor
+  · rintro ⟨init, last, h, hi, hl⟩
+    rcases init with _ | ⟨y, init⟩
+    · simp only [List.nil_append, List.cons.injEq] at h
+      obtain ⟨rfl, rfl⟩ := h
+      exact .inl ⟨rfl, hl⟩
+    · simp only [List.cons_append, List.cons.injEq] at h
+      obtain ⟨rfl, rfl⟩ := h
+      exact .inr ⟨hi _ (by simp), init, last, rfl, fun b hb => hi b (by simp [hb]), hl⟩
+  · rintro (⟨rfl, hx⟩ | ⟨hx, init, last, rfl, hi, hl⟩)
+    · exact ⟨[], x, rfl, by simp, hx⟩
+    · refine ⟨x :: init, last, rfl, ?_, hl⟩
+      intro b hb
+      rcases List.mem_cons.mp hb with rfl | hb
+      · exact hx
+      · exact hi b hb
+
+/-- A split whose first piece is nonempty starts that piece with the first octet. -/
+private theorem cons_eq_append_iff {Q : List UInt8 → Prop} (hQ : ∀ t, Q t → t ≠ [])
+    (R : List (List UInt8) → Prop) (x : UInt8) (xs : List UInt8) :
+    (∃ (t : List UInt8) (parts : List (List UInt8)),
+        x :: xs = t ++ parts.flatten ∧ Q t ∧ R parts) ↔
+      ∃ (r : List UInt8) (parts : List (List UInt8)),
+        xs = r ++ parts.flatten ∧ Q (x :: r) ∧ R parts := by
+  constructor
+  · rintro ⟨t, parts, h, hq, hr⟩
+    rcases t with _ | ⟨y, r⟩
+    · exact absurd rfl (hQ _ hq)
+    · simp only [List.cons_append, List.cons.injEq] at h
+      obtain ⟨rfl, rfl⟩ := h
+      exact ⟨r, parts, rfl, hq, hr⟩
+  · rintro ⟨r, parts, rfl, hq, hr⟩
+    exact ⟨x :: r, parts, rfl, hq, hr⟩
+
+/-- Nonempty octets split into subidentifiers exactly when a first one comes before the rest. -/
+private theorem cons_eq_flatten_iff (x : UInt8) (xs : List UInt8) :
+    (∃ parts : List (List UInt8), x :: xs = parts.flatten ∧ ∀ q ∈ parts, Sub q) ↔
+      ∃ (t : List UInt8) (parts : List (List UInt8)),
+        x :: xs = t ++ parts.flatten ∧ Sub t ∧ ∀ q ∈ parts, Sub q := by
+  constructor
+  · rintro ⟨_ | ⟨t, parts⟩, h, hp⟩
+    · simp at h
+    · exact ⟨t, parts, h, hp t (by simp), fun q hq => hp q (by simp [hq])⟩
+  · rintro ⟨t, parts, h, ht, hp⟩
+    refine ⟨t :: parts, h, ?_⟩
+    intro q hq
+    rcases List.mem_cons.mp hq with rfl | hq
+    · exact ht
+    · exact hp q hq
+
+/-- From the start of a subidentifier the fold ends at a start exactly on whole subidentifiers.
+
+From inside one, it ends at a start exactly when the octets end that one first. -/
+private theorem foldlM_oidStep (c : List UInt8) :
+    (c.foldlM oidStep true = .ok true ↔
+      ∃ parts : List (List UInt8), c = parts.flatten ∧ ∀ q ∈ parts, Sub q) ∧
+    (c.foldlM oidStep false = .ok true ↔
+      ∃ (t : List UInt8) (parts : List (List UInt8)),
+        c = t ++ parts.flatten ∧ Tail t ∧ ∀ q ∈ parts, Sub q) := by
+  induction c with
+  | nil =>
+    refine ⟨?_, ?_⟩
+    · simp only [List.foldlM_nil, pure, Except.pure, true_iff]
+      exact ⟨[], rfl, by simp⟩
+    · simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq, Bool.false_eq_true,
+        false_iff, not_exists, not_and]
+      intro t parts h ht
+      have := tail_ne_nil ht
+      simp_all
+  | cons x xs ih =>
+    have hS : ∀ t, Sub t → t ≠ [] := fun t h => tail_ne_nil h.2
+    rw [cons_eq_flatten_iff, cons_eq_append_iff hS, cons_eq_append_iff (fun t h => tail_ne_nil h)]
+    have hsub : ∀ r, Sub (x :: r) ↔ x ≠ 0x80 ∧ Tail (x :: r) := fun r => by simp [Sub]
+    simp only [hsub, tail_cons_iff]
+    have hnil : ∀ P : List (List UInt8) → Prop,
+        (∃ parts : List (List UInt8), xs = parts.flatten ∧ P parts) ↔
+          ∃ (r : List UInt8) (parts : List (List UInt8)),
+            xs = r ++ parts.flatten ∧ r = [] ∧ P parts := by
+      intro P
+      constructor
+      · rintro ⟨parts, h, hp⟩
+        exact ⟨[], parts, h, rfl, hp⟩
+      · rintro ⟨r, parts, h, rfl, hp⟩
+        exact ⟨parts, h, hp⟩
+    by_cases h128 : x = 0x80
+    · subst h128
+      simp [List.foldlM_cons, oidStep, throw, throwThe, MonadExceptOf.throw, bind,
+        Except.bind, pure, Except.pure, ih.2]
+    · by_cases hx : x.toNat < 0x80
+      · have hx' : ¬ 0x80 ≤ x.toNat := by omega
+        simp only [List.foldlM_cons, oidStep, h128, hx, hx', and_false, ite_false, pure,
+          Except.pure, bind, Except.bind, decide_true, ih.1, false_and, or_false, true_and,
+          ne_eq, not_false_eq_true, and_true]
+        exact ⟨hnil _, hnil _⟩
+      · have hx' : 0x80 ≤ x.toNat := by omega
+        simp only [List.foldlM_cons, oidStep, h128, hx, hx', and_false, ite_false, pure,
+          Except.pure, bind, Except.bind, decide_false, ih.2, false_or, true_and,
+          ne_eq, not_false_eq_true]
+
+/-- An OBJECT IDENTIFIER reads as `bytes` exactly when its tag is 6 and `bytes` is its content.
+
+The content must be one or more subidentifiers (X.690 §8.19.2).
+
+Bit 8 is set on each octet of a subidentifier but the last, and clear on the last.
+
+The first octet of a subidentifier is not 80, so that it takes the fewest octets.
+
+The first subidentifier combines two arcs, and any value of it names a valid pair (§8.19.4). -/
+theorem oid_ok_iff {value : Value} {bytes : ByteArray} :
+    oid value = .ok bytes ↔ value.tag = 6 ∧ bytes = value.content ∧
+      ∃ parts : List (List UInt8), parts ≠ [] ∧ value.content.data.toList = parts.flatten ∧
+        ∀ p ∈ parts, p.head? ≠ some 0x80 ∧ ∃ init last, p = init ++ [last] ∧
+          (∀ b ∈ init, 0x80 ≤ b.toNat) ∧ last.toNat < 0x80 := by
+  rw [oid_eq]
+  change _ ↔ _ ∧ _ ∧ ∃ parts : List (List UInt8), parts ≠ [] ∧
+    value.content.data.toList = parts.flatten ∧ ∀ p ∈ parts, Sub p
+  have hempty : value.content.isEmpty = true ↔ value.content.data.toList = [] := by
+    have hsize : value.content.size = value.content.data.toList.length := by
+      rw [Array.length_toList]
+      rfl
+    simp only [ByteArray.isEmpty, hsize, beq_iff_eq, List.length_eq_zero_iff]
+  by_cases ht : value.tag = 6
+  · simp only [ht, bne_self_eq_false, Bool.false_eq_true, ite_false, true_and]
+    revert hempty
+    generalize value.content.data.toList = c
+    intro hempty
+    rcases c with _ | ⟨x, xs⟩
+    · simp only [hempty, ite_true, throw, throwThe, MonadExceptOf.throw, bind, Except.bind,
+        reduceCtorEq, false_iff, not_and, not_exists]
+      intro _ parts hne h hp
+      rcases parts with _ | ⟨p, parts⟩
+      · exact hne rfl
+      · have := tail_ne_nil (hp p (by simp)).2
+        simp_all
+    · have hne : ¬ value.content.isEmpty = true := by simp [hempty]
+      have key := (foldlM_oidStep (x :: xs)).1
+      cases h : (x :: xs).foldlM oidStep true with
+      | error e =>
+        simp only [hne, ↓reduceIte, bind, Except.bind, reduceCtorEq, false_iff, not_and,
+          not_exists]
+        intro _ parts _ hc hp
+        rw [key.mpr ⟨parts, hc, hp⟩] at h
+        cases h
+      | ok a =>
+        cases a
+        · simp only [hne, ↓reduceIte, bind, Except.bind, Bool.false_eq_true, throw, throwThe,
+            MonadExceptOf.throw, reduceCtorEq, false_iff, not_and, not_exists]
+          intro _ parts _ hc hp
+          rw [key.mpr ⟨parts, hc, hp⟩] at h
+          cases h
+        · obtain ⟨parts, hc, hp⟩ := key.mp h
+          simp only [hne, ↓reduceIte, bind, Except.bind, pure, Except.pure, Except.ok.injEq,
+            Bool.false_eq_true]
+          constructor
+          · rintro rfl
+            refine ⟨rfl, parts, ?_, hc, hp⟩
+            rintro rfl
+            simp at hc
+          · rintro ⟨rfl, -⟩
+            rfl
+  · simp [ht, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+
 /-! ## The certificate subset -/
 
 /-- With positive fuel, a value of tag 1 passes validation exactly when its content is 00 or FF. -/
@@ -824,5 +1017,284 @@ theorem validate_universalString_ok_iff {value : Value} (tag : value.tag = 28) :
       (∀ c ∈ chars, c < 256 ^ 4 ∧ c ≤ 0x10FFFF ∧ (c < 0xD800 ∨ 0xDFFF < c)) ∧
       value.content.data.toList = chars.flatMap (natToBytes 4) :=
   validate_go_universalString_ok_iff _ tag
+
+/-- With positive fuel, a value of tag 6 passes validation exactly when it is subidentifiers.
+
+Each has bit 8 set on all its octets but the last, and a first octet other than 80. -/
+private theorem validate_go_oid_ok_iff {value : Value} (fuel : Nat) (tag : value.tag = 6) :
+    validate.go (fuel + 1) value = .ok () ↔
+      ∃ parts : List (List UInt8), parts ≠ [] ∧ value.content.data.toList = parts.flatten ∧
+        ∀ p ∈ parts, p.head? ≠ some 0x80 ∧ ∃ init last, p = init ++ [last] ∧
+          (∀ b ∈ init, 0x80 ≤ b.toNat) ∧ last.toNat < 0x80 := by
+  have ho : (∃ b, oid value = .ok b) ↔ ∃ parts : List (List UInt8), parts ≠ [] ∧
+      value.content.data.toList = parts.flatten ∧ ∀ p ∈ parts, p.head? ≠ some 0x80 ∧
+        ∃ init last, p = init ++ [last] ∧ (∀ b ∈ init, 0x80 ≤ b.toNat) ∧
+          last.toNat < 0x80 := by
+    simp only [oid_ok_iff, tag, true_and, exists_eq_left]
+  rw [← ho, validate.go, tag]
+  cases oid value <;> simp [bind, Except.bind, pure, Except.pure]
+
+/-- With positive fuel, a value of tag 5 passes validation exactly when its content is empty.
+
+That is the NULL of X.690 §8.8.2. -/
+private theorem validate_go_null_ok_iff {value : Value} (fuel : Nat) (tag : value.tag = 5) :
+    validate.go (fuel + 1) value = .ok () ↔ value.content.data.toList = [] := by
+  have hsize : value.content.size = value.content.data.toList.length := by
+    rw [Array.length_toList]
+    rfl
+  rw [validate.go, tag]
+  simp only [ByteArray.isEmpty, hsize, beq_iff_eq, List.length_eq_zero_iff]
+  split <;> simp_all [pure, Except.pure, throw, throwThe, MonadExceptOf.throw]
+
+/-- With positive fuel, a value of tag 12 passes validation exactly when it is UTF-8 characters.
+
+That is the UTF8String of X.690 §8.23.10. -/
+private theorem validate_go_utf8String_ok_iff {value : Value} (fuel : Nat) (tag : value.tag = 12) :
+    validate.go (fuel + 1) value = .ok () ↔
+      ∃ chars : List Char, value.content = chars.utf8Encode := by
+  have hv : (String.fromUTF8? value.content).isSome = true ↔
+      ∃ chars : List Char, value.content = chars.utf8Encode := by
+    by_cases h : value.content.IsValidUTF8
+    · simp only [String.fromUTF8?, h, dite_true, Option.isSome_some, true_iff]
+      obtain ⟨chars, hc⟩ := h
+      exact ⟨chars, hc⟩
+    · simp only [String.fromUTF8?, h, dite_false, Option.isSome_none, Bool.false_eq_true,
+        false_iff, not_exists]
+      exact fun chars hc => h ⟨chars, hc⟩
+  rw [← hv, validate.go, tag]
+  split <;> simp_all [pure, Except.pure, throw, throwThe, MonadExceptOf.throw]
+
+/-- The marks of PrintableString besides the letters and digits (X.680 §41.4). -/
+private def printableMarks : List Char :=
+  [' ', '\'', '(', ')', '+', ',', '-', '.', '/', ':', '=', '?']
+
+/-- An octet is a PrintableString character: a Latin letter, a digit, or one of 12 marks. -/
+private theorem printable_iff (b : UInt8) :
+    ((48 ≤ b.toNat && b.toNat ≤ 57) || (65 ≤ b.toNat && b.toNat ≤ 90) ||
+      (97 ≤ b.toNat && b.toNat ≤ 122) ||
+      ([32, 39, 40, 41, 43, 44, 45, 46, 47, 58, 61, 63] : List UInt8).contains b) = true ↔
+      (Char.ofNat b.toNat).isAlphanum ∨ Char.ofNat b.toNat ∈ printableMarks := by
+  have key : ∀ n < 256,
+      ((48 ≤ n && n ≤ 57) || (65 ≤ n && n ≤ 90) || (97 ≤ n && n ≤ 122) ||
+        ([32, 39, 40, 41, 43, 44, 45, 46, 47, 58, 61, 63] : List UInt8).contains
+          (UInt8.ofNat n)) = true ↔
+        (Char.ofNat n).isAlphanum ∨ Char.ofNat n ∈ printableMarks := by
+    decide +kernel
+  have := key b.toNat b.toNat_lt
+  rwa [UInt8.ofNat_toNat] at this
+
+/-- With positive fuel, a value of tag 19 passes validation exactly when it is PrintableString.
+
+Each octet is then a Latin letter, a digit, a space or one of `'()+,-./:=?` (X.680 §41.4). -/
+private theorem validate_go_printableString_ok_iff {value : Value} (fuel : Nat)
+    (tag : value.tag = 19) :
+    validate.go (fuel + 1) value = .ok () ↔ ∀ b ∈ value.content.data.toList,
+      (Char.ofNat b.toNat).isAlphanum ∨
+        Char.ofNat b.toNat ∈ [' ', '\'', '(', ')', '+', ',', '-', '.', '/', ':', '=', '?'] := by
+  simp only [show [' ', '\'', '(', ')', '+', ',', '-', '.', '/', ':', '=', '?'] = printableMarks
+    from rfl, ← printable_iff]
+  rw [← List.all_eq_true, validate.go, tag]
+  split <;> simp_all [pure, Except.pure, throw, throwThe, MonadExceptOf.throw]
+
+/-- With positive fuel, a value of any tag outside the certificate subset is rejected by its tag.
+
+The subset is BOOLEAN, INTEGER, BIT STRING, OCTET STRING, NULL and OBJECT IDENTIFIER.
+
+It also holds the UTF8String, PrintableString, IA5String, UniversalString and BMPString.
+
+The constructed SEQUENCE and SET have identifier octets 48 and 49. -/
+private theorem validate_go_eq_error_tag {value : Value} (fuel : Nat)
+    (tag : value.tag.toNat ∉ [1, 2, 3, 4, 5, 6, 12, 19, 22, 28, 30, 48, 49]) :
+    validate.go (fuel + 1) value = .error .tag := by
+  rw [validate.go]
+  split <;> simp_all <;> rfl
+
+/-- A value of tag 6 passes validation exactly when its content is one or more subidentifiers.
+
+Each has bit 8 set on all its octets but the last, and a first octet other than 80. -/
+theorem validate_oid_ok_iff {value : Value} (tag : value.tag = 6) :
+    validate value = .ok () ↔
+      ∃ parts : List (List UInt8), parts ≠ [] ∧ value.content.data.toList = parts.flatten ∧
+        ∀ p ∈ parts, p.head? ≠ some 0x80 ∧ ∃ init last, p = init ++ [last] ∧
+          (∀ b ∈ init, 0x80 ≤ b.toNat) ∧ last.toNat < 0x80 :=
+  validate_go_oid_ok_iff _ tag
+
+/-- A NULL passes validation exactly when its content is empty (X.690 §8.8.2). -/
+theorem validate_null_ok_iff {value : Value} (tag : value.tag = 5) :
+    validate value = .ok () ↔ value.content.data.toList = [] :=
+  validate_go_null_ok_iff _ tag
+
+/-- A UTF8String passes validation exactly when it is the UTF-8 encoding of some characters. -/
+theorem validate_utf8String_ok_iff {value : Value} (tag : value.tag = 12) :
+    validate value = .ok () ↔ ∃ chars : List Char, value.content = chars.utf8Encode :=
+  validate_go_utf8String_ok_iff _ tag
+
+/-- A PrintableString passes validation exactly when each octet is one of its characters.
+
+Those are the Latin letters, the digits, the space and `'()+,-./:=?` (X.680 §41.4). -/
+theorem validate_printableString_ok_iff {value : Value} (tag : value.tag = 19) :
+    validate value = .ok () ↔ ∀ b ∈ value.content.data.toList,
+      (Char.ofNat b.toNat).isAlphanum ∨
+        Char.ofNat b.toNat ∈ [' ', '\'', '(', ')', '+', ',', '-', '.', '/', ':', '=', '?'] :=
+  validate_go_printableString_ok_iff _ tag
+
+/-- A value of a tag outside the certificate subset fails validation with a tag error. -/
+theorem validate_eq_error_tag {value : Value}
+    (tag : value.tag.toNat ∉ [1, 2, 3, 4, 5, 6, 12, 19, 22, 28, 30, 48, 49]) :
+    validate value = .error .tag :=
+  validate_go_eq_error_tag _ tag
+
+/-! ## SEQUENCE and SET OF -/
+
+/-- The size of a byte array is the length of its octet list. -/
+private theorem size_eq_length (b : ByteArray) : b.size = b.data.toList.length := by
+  rw [Array.length_toList]
+  rfl
+
+/-- A value that the reader returns has an encoding longer than its content, by its header. -/
+private theorem size_lt_of_read_ok {input rest : ByteArray} {v : Value}
+    (h : read input = .ok (v, rest)) :
+    v.content.size < v.encoded.size ∧ v.encoded.size + rest.size = input.size := by
+  obtain ⟨-, -, hin, hv⟩ := read_ok_iff.mp h
+  refine ⟨?_, by rw [size_eq_length, size_eq_length, size_eq_length, hin, List.length_append]⟩
+  rw [size_eq_length, size_eq_length]
+  rcases hv with ⟨-, hv⟩ | ⟨k, -, -, -, -, hv⟩ <;> rw [hv] <;> simp <;> omega
+
+/-- Each value that a read of siblings returns is a read value at most as long as the input. -/
+private theorem children_go_sizes : ∀ (fuel : Nat) (input : ByteArray) (vs : List Value),
+    children.go fuel input = .ok vs →
+      ∀ v ∈ vs, v.content.size < v.encoded.size ∧ v.encoded.size ≤ input.size := by
+  intro fuel
+  induction fuel with
+  | zero =>
+    intro input vs h v hv
+    simp only [children.go] at h
+    split at h
+    · cases h
+      simp at hv
+    · cases h
+  | succ fuel ih =>
+    intro input vs h v hv
+    simp only [children.go] at h
+    by_cases he : input.isEmpty = true
+    · simp only [he, ite_true, pure, Except.pure, bind, Except.bind, Except.ok.injEq] at h
+      subst h
+      simp at hv
+    · cases hr : read input with
+      | error e => simp [he, hr, bind, Except.bind] at h
+      | ok p =>
+        obtain ⟨w, rest⟩ := p
+        obtain ⟨hw, hsize⟩ := size_lt_of_read_ok hr
+        cases hg : children.go fuel rest with
+        | error e => simp [he, hr, hg, bind, Except.bind] at h
+        | ok ws =>
+          simp only [he, hr, hg, Bool.false_eq_true, ite_false, bind, Except.bind, pure,
+            Except.pure, Except.ok.injEq] at h
+          subst h
+          rcases List.mem_cons.mp hv with rfl | hv
+          · exact ⟨hw, by omega⟩
+          · have := ih rest ws hg v hv
+            omega
+
+/-- Two checks that agree on each value agree on the list. -/
+private theorem forM_congr {F G : Value → Except Error Unit} :
+    ∀ vs : List Value, (∀ v ∈ vs, F v = G v) → vs.forM F = vs.forM G
+  | [], _ => rfl
+  | v :: vs, h => by
+    show (F v >>= fun _ => vs.forM F) = (G v >>= fun _ => vs.forM G)
+    rw [h v (by simp), forM_congr vs (fun w hw => h w (by simp [hw]))]
+
+/-- Validation of a read value gives one verdict for every fuel above its encoded size. -/
+private theorem go_fuel : ∀ (f g : Nat) (w : Value), w.content.size < w.encoded.size →
+    w.encoded.size < f → w.encoded.size < g → validate.go f w = validate.go g w := by
+  intro f
+  induction f with
+  | zero => intros; omega
+  | succ f ih =>
+    intro g w hw hf hg
+    cases g with
+    | zero => omega
+    | succ g =>
+      rw [validate.go, validate.go]
+      split <;> try rfl
+      all_goals
+        cases hc : children w.content with
+        | error e => rfl
+        | ok vs =>
+          have hvs : vs.forM (validate.go f) = vs.forM (validate.go g) := by
+            apply forM_congr
+            intro v hv
+            have := children_go_sizes _ _ _ hc v hv
+            exact ih g v this.1 (by omega) (by omega)
+          simp only [bind, Except.bind, hvs]
+
+/-- A check passes on a list exactly when it passes on each value. -/
+private theorem forM_ok_iff {F : Value → Except Error Unit} :
+    ∀ vs : List Value, vs.forM F = .ok () ↔ ∀ v ∈ vs, F v = .ok ()
+  | [] => by simp [List.forM, pure, Except.pure]
+  | v :: vs => by
+    show (F v >>= fun _ => vs.forM F) = .ok () ↔ _
+    rw [List.forall_mem_cons, ← forM_ok_iff vs]
+    cases F v <;> simp [bind, Except.bind]
+
+/-- A constructed value passes validation exactly when its content reads as values that pass.
+
+A SET OF also needs the encodings of those values in ascending order. -/
+private theorem validate_constructed_ok_iff {value : Value}
+    (tag : value.tag.toNat = 48 ∨ value.tag.toNat = 49)
+    (header : value.content.size < value.encoded.size) :
+    validate value = .ok () ↔ ∃ values, children value.content = .ok values ∧
+      (value.tag = 49 → (values.map (·.encoded.data.toList)).Pairwise (· ≤ ·)) ∧
+        ∀ v ∈ values, validate v = .ok () := by
+  have hforM : ∀ vs, children value.content = .ok vs →
+      (vs.forM (validate.go value.encoded.size) = .ok () ↔
+        ∀ v ∈ vs, validate v = .ok ()) := by
+    intro vs hc
+    rw [forM_ok_iff]
+    have hgo : ∀ v ∈ vs, validate.go value.encoded.size v = validate v := by
+      intro v hv
+      have := children_go_sizes _ _ _ hc v hv
+      exact go_fuel _ _ v this.1 (by omega) (by omega)
+    constructor
+    · intro h v hv
+      rw [← hgo v hv]
+      exact h v hv
+    · intro h v hv
+      rw [hgo v hv]
+      exact h v hv
+  rw [validate, validate.go]
+  rcases tag with h | h <;> simp only [h] <;>
+    cases hc : children value.content with
+    | error e => simp [bind, Except.bind]
+    | ok vs =>
+      simp only [bind, Except.bind, Except.ok.injEq, exists_eq_left', ← hforM vs hc]
+      by_cases h49 : value.tag = 49
+      · by_cases hp : (vs.map (·.encoded.data.toList)).Pairwise (· ≤ ·)
+        · simp [h49, hp]
+        · simp [h49, hp, throw, throwThe, MonadExceptOf.throw]
+      · simp [h49]
+
+/-- A SEQUENCE passes validation exactly when its content reads as values that each pass.
+
+Every value that the reader returns has a header, so its encoding is longer than its content. -/
+theorem validate_sequence_ok_iff {value : Value} (tag : value.tag = 48)
+    (header : value.content.size < value.encoded.size) :
+    validate value = .ok () ↔ ∃ values, children value.content = .ok values ∧
+      ∀ v ∈ values, validate v = .ok () := by
+  rw [validate_constructed_ok_iff (.inl (by rw [tag]; rfl)) header]
+  simp [tag]
+
+/-- A SET OF passes validation exactly when its content reads as values that each pass.
+
+Their encodings must also come in ascending order, compared octet by octet (X.690 §11.6).
+
+Every value that the reader returns has a header, so its encoding is longer than its content. -/
+theorem validate_set_ok_iff {value : Value} (tag : value.tag = 49)
+    (header : value.content.size < value.encoded.size) :
+    validate value = .ok () ↔ ∃ values, children value.content = .ok values ∧
+      (values.map (·.encoded.data.toList)).Pairwise (· ≤ ·) ∧
+        ∀ v ∈ values, validate v = .ok () := by
+  rw [validate_constructed_ok_iff (.inr (by rw [tag]; rfl)) header]
+  simp [tag]
 
 end EthLib.Serialization.Proofs.Der
