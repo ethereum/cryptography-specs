@@ -1,8 +1,8 @@
 module
 
 public import EthLib.Consensus.Proofs.ForkChoice.CommitteeAgreement
-public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmationSets
-public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmationSupporters
+public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Sets
+public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Supporters
 
 /-!
 # Proofs: each supporter of a tested block is in the committees that the rule reads

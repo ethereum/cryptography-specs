@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Base.Proofs.FilterM
-public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation
+public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Basic
 public import EthLib.Consensus.Proofs.Models.ForkChoice.HonestSupport
 public import EthLib.Consensus.Proofs.Transition.FfgStake
 public import Mathlib.Algebra.BigOperators.Ring.Finset

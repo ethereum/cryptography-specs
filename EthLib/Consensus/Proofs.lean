@@ -84,11 +84,6 @@ public import EthLib.Consensus.Proofs.ForkChoice.CheckpointBlocks
 public import EthLib.Consensus.Proofs.ForkChoice.Checkpoints
 public import EthLib.Consensus.Proofs.ForkChoice.CommitteeAgreement
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation
-public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmationCommittees
-public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmationConfirmedRoot
-public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmationIndicators
-public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmationSets
-public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmationSupporters
 public import EthLib.Consensus.Proofs.ForkChoice.ForwardClock
 public import EthLib.Consensus.Proofs.ForkChoice.Ghost
 public import EthLib.Consensus.Proofs.ForkChoice.Handlers
