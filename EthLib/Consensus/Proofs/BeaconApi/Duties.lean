@@ -41,29 +41,15 @@ Each seat of a sync duty holds the key of the validator.
 
 Each refusal of the sync answer is one of four errors, all with code 400.
 
-The dependent root fails only with the error of an invalid epoch, code 400.
-
-That result needs the start of the epoch that the root reads to fit in 64 bits.
-
-It also needs the slot of the state plus the length of the buffer of roots to be at most `2^64`.
+Under bounds on the slots, the dependent root fails only with the error of an invalid epoch.
 
 Before Fulu, both proposer answers give code 500 to a current epoch with no active validator.
 
-That refusal needs an epoch of at least one slot.
+From Fulu, under the same bounds, a proposer answer gets code 500 exactly at a lookahead entry.
 
-From Fulu, a proposer answer gets code 500 exactly when a lookahead entry names no validator.
+That entry lies at a slot of the requested epoch, and names no validator.
 
-That entry lies at a slot of the requested epoch.
-
-That result needs the first answer at the current epoch, or the second at an epoch of the lookahead.
-
-It also needs the slots of the epoch to fit in 64 bits.
-
-If the lookahead names only validators, the answers fail only with the error of an invalid epoch.
-
-That result covers any epoch whose slots fit in 64 bits.
-
-It holds even with no active validator, unlike the answers before Fulu.
+Under those bounds, if each lookahead entry names a validator, the answer fails only with code 400.
 -/
 
 @[expose] public section
@@ -581,7 +567,7 @@ theorem dependentRoot_eq {state : BeaconState preset fork} {lag : Nat} {epoch : 
   simp [dependentRoot, Nat.not_lt.mpr late, started, positive, Except.mapError, bind,
     Except.bind]
 
-/-- The epoch a lag before the given one starts at that epoch times the length of an epoch.
+/-- The first slot of the epoch a lag before the given one is that epoch times the epoch length.
 
 It needs a lag of at most the given epoch, and that product to fit in 64 bits. -/
 private theorem dependentRoot_start_exists {lag : Nat} {epoch : Epoch} (late : lag ≤ epoch.toNat)
@@ -638,33 +624,6 @@ theorem dependentRoot_too_old {state : BeaconState preset fork} {lag : Nat} {epo
   rw [dependentRoot_eq late.le startOk positive]
   simp [getBlockRootAtSlot, before, liftArith, bound, beyond, Except.mapError, rootError,
     throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
-
-/-- A read of a recorded root fails only for a slot out of range.
-
-It needs the slot of the state plus the length of the buffer of roots to be at most `2^64`. -/
-private theorem getBlockRootAtSlot_error {state : BeaconState preset fork} {slot : Slot}
-    {fault : AccessorError}
-    (room : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat ≤ 2 ^ 64)
-    (failed : getBlockRootAtSlot state slot = .error fault) :
-    fault = .slotOutOfRange slot state.slot := by
-  unfold getBlockRootAtSlot at failed
-  by_cases before : slot < state.slot
-  · -- The bound of a slot before the state fits, so only the range checks can fail.
-    have bound : Uint64.addChecked slot preset.SLOTS_PER_HISTORICAL_ROOT =
-        .ok (slot + preset.SLOTS_PER_HISTORICAL_ROOT) :=
-      Uint64.addChecked_of_lt (by have := UInt64.lt_iff_toNat_lt.mp before; omega)
-    by_cases within : state.slot ≤ slot + preset.SLOTS_PER_HISTORICAL_ROOT
-    · have nonzero : preset.SLOTS_PER_HISTORICAL_ROOT ≠ 0 := by
-        intro zero
-        rw [zero, UInt64.add_zero] at within
-        exact absurd before (UInt64.not_lt.mpr within)
-      simp [before, liftArith, bound, within, readCircular, nonzero, Except.mapError, bind,
-        Except.bind] at failed
-    · simp [before, liftArith, bound, within, throw, throwThe, MonadExceptOf.throw,
-        Except.mapError, bind, Except.bind] at failed
-      exact failed.symm
-  · simp [before, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at failed
-    exact failed.symm
 
 /-- The dependent root fails only with the error of an invalid epoch, code 400.
 
@@ -869,12 +828,6 @@ theorem dutiesResponse_sync_outside {config : Config} {state : BeaconState prese
     omega
   simp [dutiesResponse, altair, syncDuties, syncCommitteeOf, other, notNext, bind, Except.bind]
 
-/-- A failed map fails with its error on one of its inputs. -/
-private theorem mapM_error_mem {α β ε : Type} {f : α → Except ε β} {xs : List α} {e : ε}
-    (failed : xs.mapM f = .error e) : ∃ x ∈ xs, f x = .error e := by
-  obtain ⟨position, inside, entry, -⟩ := mapM_error failed
-  exact ⟨_, List.getElem_mem inside, entry⟩
-
 /-- Each refusal of the sync answer is one of four errors.
 
 Two are the errors of a state before Altair and of an empty request.
@@ -914,7 +867,7 @@ theorem dutiesResponse_sync_error {config : Config} {state : BeaconState preset 
     exact .inr (.inr (.inl outside.symm))
   rcases bind_eq_error refused with unknown | ⟨_, -, refused⟩
   · -- Each duty fails only by an index that names no validator.
-    obtain ⟨index, member, step⟩ := mapM_error_mem unknown
+    obtain ⟨index, member, step⟩ := exists_mem_of_mapM_error unknown
     unfold syncDuty at step
     rcases bind_eq_error step with named | ⟨_, -, step⟩
     · obtain ⟨_, -, rfl⟩ := mapError_eq_error named
@@ -1086,7 +1039,7 @@ private theorem proposerDuties_error_code {state : BeaconState preset fork} {epo
   · obtain ⟨_, -, rfl⟩ := mapError_eq_error refused
     rfl
   -- Each duty fails at its slot or at its validator, both with code 500.
-  obtain ⟨⟨proposer, offset⟩, -, step⟩ := mapM_error_mem failed
+  obtain ⟨⟨proposer, offset⟩, -, step⟩ := exists_mem_of_mapM_error failed
   dsimp only at step
   rcases bind_eq_error step with refused | ⟨_, -, step⟩
   · obtain ⟨_, -, rfl⟩ := mapError_eq_error refused
@@ -1208,7 +1161,7 @@ theorem dutiesResponse_proposer_internal_iff {config : Config} {state : BeaconSt
         cases bad
       rw [mapError_ok_iff, startOk] at startedOk
       obtain rfl := Except.ok.inj startedOk
-      obtain ⟨⟨proposer, offset⟩, member, step⟩ := mapM_error_mem refused
+      obtain ⟨⟨proposer, offset⟩, member, step⟩ := exists_mem_of_mapM_error refused
       obtain ⟨offsetLt, entry⟩ := (entryOf proposer offset).mp member
       dsimp only at step
       rcases bind_eq_error step with bad | ⟨_, -, step⟩

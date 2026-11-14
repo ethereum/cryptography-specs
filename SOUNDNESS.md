@@ -4585,13 +4585,14 @@ For the second it checks code 400 at the next epoch before Fulu, and from Fulu a
 It never asks for PTC duties at the previous epoch or before the Gloas fork epoch; only `ptcDuties_eq` covers those two.
 It sends no unknown index to the sync or PTC answer, so only the theorems cover those two.
 It checks no answer with code 500.
+
 `dutiesResponse_sync_error` shows that each refusal of the sync answer is one of four errors.
 They are the errors of a state before Altair, of an empty request, of an epoch outside both periods and of an unknown index.
 `dutiesResponse_sync_error_code` follows: the sync answer fails only with code 400.
 `dependentRoot_error` shows that the dependent root fails only with the error of an invalid epoch, code 400.
 It needs the start of the epoch that the root reads to fit in 64 bits.
 It also needs the slot of the state plus the length of the buffer of roots to be at most `2^64`.
-With that bound, `getBlockRootAtSlot` fails only for a slot out of range, which `rootError` maps to the error of an invalid epoch.
+With that bound, `getBlockRootAtSlot_error` (`Consensus/Proofs/Accessors.lean`) shows that the read of a root fails only for a slot out of range, which `rootError` maps to the error of an invalid epoch.
 `dutiesResponse_proposer_no_active` shows that before Fulu both proposer answers give code 500 to a current epoch with no active validator.
 It reads the clause of `computeProposerIndex` that refuses a draw with no candidate, and `epochProposers` gives that refusal code 500.
 That epoch gets code 500, not code 400.
@@ -4601,16 +4602,30 @@ It reads the step of `proposerDuties` that fetches the validator of each propose
 It needs the first answer at the current epoch, or the second at an epoch of the lookahead.
 It also needs the slots of the epoch to fit in 64 bits, and the bound of `dependentRoot_error` on the slot of the state.
 `dutiesResponse_proposer_error` shows that from Fulu a proposer answer fails only with the error of an invalid epoch.
-It needs the lookahead to name only validators of the state, and the same bounds on the slots.
+It needs the lookahead to name only validators of the state, the slots of the epoch to fit in 64 bits, and the bound of `dependentRoot_error` on the slot of the state.
 It covers every epoch whose slots fit, not only those of `dutiesResponse_proposer_internal_iff`, since the answers refuse the others with that error.
 `dutiesResponse_proposer_error_code` follows: such an answer fails only with code 400.
 That result holds even with no active validator, unlike the answers before Fulu.
 These cases of code 500 remain without a theorem:
 
-- No theorem bounds the entries of the lookahead by the registry along a chain from the Phase 0 genesis state of deposits. So no theorem excludes the code 500 of `dutiesResponse_proposer_internal_iff` at a state that such a chain reaches. `registryGrows_of_chainSteps` gives one part of that bound, since the registry never shrinks along a chain. A state decoded from bytes, as the export of the duty answers takes it, can hold such an entry.
-- Before Fulu, the draw of an epoch with active validators can still fail. It fails past `2^40` candidates, for a product of the draw past 64 bits, or at `2^64` steps of its search. On mainnet and minimal the type of the registry excludes the first, by `BeaconState.registryWithinLimit_of_lt`. On those presets, `drawFits_presets` and `Run.effectiveBalance_capped` exclude the second along a run from genesis. The draw also fails for an epoch within `EPOCHS_PER_HISTORICAL_VECTOR` of `2^64`, which the current epoch of a mainnet or minimal state never is. `getBeaconProposerIndices_ok` shows that the draw succeeds under bounds when an active validator is at the cap of the draw. No theorem carries that to the answers yet.
-- The committee assignment of the attester answer and the PTC assignment give code 500 for any fault but an epoch out of range. On mainnet and minimal the attester fault needs more than `2^40` active validators, or an epoch or a slot near `2^64`. The PTC fault needs an epoch or a slot near `2^64`. Before Gloas the registry holds at most `2^40` validators on those presets by its type (`BeaconState.registryWithinLimit_of_lt`). From Gloas, `Run.registryWithinLimit` bounds it the same way along a run whose start and blocks leave room.
-- A dependent root can get code 500, by an overflow, at a slot of the state within `SLOTS_PER_HISTORICAL_ROOT` of `2^64`. So can a proposer answer for an epoch whose slots pass 64 bits.
+- No theorem bounds the entries of the lookahead by the registry along a chain from the Phase 0 genesis state of deposits.
+  So no theorem excludes the code 500 of `dutiesResponse_proposer_internal_iff` at a state that such a chain reaches.
+  `registryGrows_of_chainSteps` gives one part of that bound, since the registry never shrinks along a chain.
+  A state decoded from bytes, as the export of the duty answers takes it, can hold such an entry.
+- Before Fulu, the draw of an epoch with active validators can still fail.
+  It fails past `2^40` candidates, for a product of the draw past 64 bits, or at `2^64` steps of its search.
+  On mainnet and minimal the type of the registry excludes the first, by `BeaconState.registryWithinLimit_of_lt`.
+  On those presets, `drawFits_presets` and `Run.effectiveBalance_capped` exclude the second along a run from genesis.
+  The draw also fails for an epoch within `EPOCHS_PER_HISTORICAL_VECTOR` of `2^64`, which the current epoch of a mainnet or minimal state never is.
+  `getBeaconProposerIndices_ok` shows that the draw succeeds under bounds when an active validator is at the cap of the draw.
+  No theorem carries that to the answers yet.
+- The committee assignment of the attester answer and the PTC assignment give code 500 for any fault but an epoch out of range.
+  On mainnet and minimal the attester fault needs more than `2^40` active validators, or an epoch or a slot near `2^64`.
+  The PTC fault needs an epoch or a slot near `2^64`.
+  Before Gloas the registry holds at most `2^40` validators on those presets by its type (`BeaconState.registryWithinLimit_of_lt`).
+  From Gloas, `Run.registryWithinLimit` bounds it the same way along a run whose start and blocks leave room.
+- A dependent root can get code 500, by an overflow, at a slot of the state within `SLOTS_PER_HISTORICAL_ROOT` of `2^64`.
+  So can a proposer answer for an epoch whose slots pass 64 bits.
 
 No theorem states the code 400 that the PTC assignment gives to an epoch past the seed lookahead.
 It is reachable only at the next epoch, under a preset whose seed lookahead is zero.
