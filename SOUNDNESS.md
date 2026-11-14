@@ -5426,7 +5426,7 @@ Before Altair the rewards and penalties need `RewardsFitBeforeAltair`, a set of 
 They read the root of the block at the slot of each vote that matches the target.
 So they assume that each recent pending attestation is as inclusion in a block stored it (`PendingWellFormed`).
 Its slot is then in the epoch of its list, its inclusion delay is not zero, and its proposer is a validator of the registry.
-No theorem yet shows that this holds along a run: the preservation must be stated over the slot advance and block processing, and the nonzero delay needs a least inclusion delay of one slot, as mainnet and minimal have.
+Slots keep it (`PendingWellFormed.of_advanceSlot`), but no theorem yet shows that block processing does, and the nonzero delay needs a least inclusion delay of one slot, as mainnet and minimal have.
 The inactivity penalty before Altair multiplies an effective balance by the delay of finality, which is at most the current epoch.
 So the bound on the current epoch limits the length of the run that the theorem covers.
 A proposer can earn a share of the base reward of each signer that it included.
@@ -5482,6 +5482,29 @@ The four facts that the runs assume do hold through that upgrade, by `PaymentFac
 The "at least once" half is stated for a chain split at the epoch step, which fixes the step that pays.
 The quorum is read on the state that the epoch transition reaches before its step of the payments.
 A bid whose payment a slashing cancels may still be paid by the late path of the bid, and then the run releases it once.
+
+`processSlotsAcross_exists_ok_of_run` (`Proofs/Transition/Totality/Run.lean`) puts these steps together: from a bounded state, every slot advance within a horizon succeeds.
+The advance applies no block, so the theorem covers a run of empty slots, with the upgrades on the way.
+The horizon is a number of epochs that the conditions of the run fix (`RunConditions`).
+It is at most the epochs in which the inactivity scores, which grow by the score bias, still fit with the largest cap (`Preset.horizon`).
+On mainnet, from scores of zero, that is 2251799 epochs, about 27 years, and the mainnet corollary uses `2.25 * 10^6`.
+The state at the start must keep the facts of a run (`RunHolds`).
+They are the invariant of the state transition, the shape of the state and the bounds of the start.
+They also include `JustifiedEarly`, and before Altair the facts that a block checked on each pending attestation.
+No theorem yet shows that block processing keeps `PendingWellFormed`, `PendingResolved` and the bounds, so the theorem says nothing about a chain with blocks.
+The run also takes three hypotheses on the states it reaches, which no bound gives.
+`SignersEarly`: in the first two epochs of the run, the signers of the previous epoch hold at most the active balance; a validator that signed and exits at the epoch boundary can break it, and from the third epoch no one has signed.
+`DrawsAtCap`: each draw of a sync committee, of the proposers and of a payload committee meets a validator at the cap of its fork, and the upgrade to Heze finds its two deposit indices equal.
+`EpochLimitBeforeAltair`: a run that starts before Altair ends by an epoch at which the inactivity penalty fits, at least `9 * 10^6` on mainnet.
+From Electra the run that the theorem covers is much shorter than the horizon, which only bounds the arithmetic.
+A run of empty slots finalizes nothing, so once finality is more than four epochs behind, every validator leaks.
+A validator stays at the cap of the draw only while its balance is at most 0.25 ETH below the cap.
+From a balance of 2048 ETH and a score of zero, the inactivity penalties alone take it below within 64 epochs of leak.
+Even a balance of 36 million ETH falls below within about `7.7 * 10^5` epochs.
+Before Electra the cap is 32 ETH, so a balance far above it can keep the effective balance at the cap past the horizon; from Electra the cap is 2048 ETH and the leak exhausts any balance within the supply bound.
+So from Electra the runs that meet `DrawsAtCap` are far shorter than the horizon, and the mainnet theorem says nothing for longer runs.
+`processSlotsAcross_exists_ok_emptyGenesisState` shows that the hypotheses can hold together, but only with an empty registry before Altair; no witness yet covers a run from Altair.
+Without a validator at the cap, whether a draw ends depends on the hashes; a theorem without `DrawsAtCap` would need a model of the hash, such as a random oracle.
 
 Whatever those hypotheses leave unproved is part of what a reader trusts.
 
