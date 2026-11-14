@@ -3710,8 +3710,8 @@ A 64-bit number decodes to `x` exactly when the number read with the bound `2^64
 The encoder of numbers writes the only text that decodes to the number, at any bound `2^bits` above it (`quantity_eq_ok_iff`).
 So two numbers never share an encoding (`quantityJson_inj`).
 The error object of JSON-RPC 2.0 reads back from what its writer writes, whatever its data, `null` included (`rpcErrorOfJson_json`).
-A JSON number reads as an integer exactly when its mantissa is a multiple of the power of ten under it (`integer_eq_ok_iff`).
-A value reads as an error object exactly when it is an object of the members `code`, `message` and `data` alone (`rpcErrorOfJson_eq_ok_iff`).
+A JSON value reads as an integer exactly when it is a number `m / 10 ^ e` whose mantissa `m` is a multiple of `10 ^ e` (`integer_eq_ok_iff`).
+A value reads as an error object exactly when its only members are `code`, `message` and, optionally, `data` (`rpcErrorOfJson_eq_ok_iff`).
 Its code is an integer, and its message a string.
 Its data is the value under `data`, `null` included, and none when the member is missing.
 A withdrawal, and a list of withdrawals, decode back from their encodings (`withdrawal_withdrawalJson`, `array_withdrawal_listJson`, `Execution/Proofs/Rpc/Json.lean`).
@@ -3898,7 +3898,7 @@ Its `jsonrpc` is the string `2.0`, its `id` a string, a number or `null`, and it
 Its `params`, when present, is an array.
 By that theorem, the reader refuses a request without the version, with its parameters by name, or with an identifier of another type.
 A JSON value reads as a response exactly when it is an object of three members (`response_eq_ok_iff`).
-Its `jsonrpc` is the string `2.0`, and its `id` the identifier.
+Its `jsonrpc` is the string `2.0`, and its `id` the identifier of the response.
 The third member is either `result`, of any value, or `error`, an error object.
 So the reader refuses a response with both a result and an error, or with neither.
 It also refuses a member of another name, and a response without the version.

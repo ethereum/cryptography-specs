@@ -224,7 +224,9 @@ theorem request_eq_ok_iff {j : Json} {r : Request} :
 
 The value of `jsonrpc` is the string `2.0`, and the value of `id` the identifier of the response.
 
-The third member is either `result`, whose value is the result, or `error`, an error object. -/
+The third member is either `result`, whose value is the result, or `error`.
+
+The value of `error` then reads as the error of the response. -/
 theorem response_eq_ok_iff {j : Json} {r : Response} :
     response j = .ok r ↔ ∃ kvs, j = .obj kvs ∧ kvs.toList.length = 3 ∧
       kvs.toList.lookup "jsonrpc" = some (.str "2.0") ∧

@@ -65,9 +65,9 @@ The bounded byte reader succeeds exactly when the byte reader succeeds within th
 
 An object built from pairs with distinct names holds exactly those pairs.
 
-A number reads as an integer exactly when it equals one.
+A number reads as an integer exactly when its value is a whole number.
 
-A value reads as an error object exactly when it is an object of a code, a message and the data.
+A value reads as an error object exactly when its only members are a code, a message and data.
 
 The data may be missing.
 -/
@@ -1385,7 +1385,7 @@ theorem rpcErrorOfJson_json (e : RpcError) : rpcErrorOfJson (rpcErrorJson e) = .
 
 /-- A JSON value reads as an integer exactly when it is a number that equals an integer.
 
-Lean writes a number as a mantissa `m` over `10` to the power of an exponent `e`.
+A JSON number in Lean is a mantissa `m` over `10` to the power of an exponent `e`.
 
 It reads as `m / 10 ^ e` when `10 ^ e` divides `m`. -/
 theorem integer_eq_ok_iff {what : String} {j : Lean.Json} {i : Int} :
@@ -1405,9 +1405,9 @@ theorem integer_eq_ok_iff {what : String} {j : Lean.Json} {i : Int} :
       simp [integer, h, pure, Except.pure]
   | _ => simp [integer, reject, throw, throwThe, MonadExceptOf.throw]
 
-/-- A JSON value reads as an error object exactly when it is an object of its members alone.
+/-- A JSON value reads as an error object exactly when it is an object with no unknown member.
 
-Those members are `code`, `message` and `data`, and the last may be missing.
+The known members are `code`, `message` and `data`.
 
 The code is the integer under `code`, and the message the string under `message`.
 
