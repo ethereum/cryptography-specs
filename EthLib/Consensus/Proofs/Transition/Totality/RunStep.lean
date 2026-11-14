@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Consensus.Proofs.Transition.TargetPending
 public import EthLib.Consensus.Proofs.Transition.Totality.Horizon
 public import EthLib.Consensus.Proofs.Transition.Totality.Pending
 public import EthLib.Consensus.Proofs.Transition.Totality.RunBounds
@@ -488,15 +489,77 @@ theorem RunBounded.of_processEpoch_of_run {start : RunStart}
     shaped.participationMatches resolved signers first conditions.minimum conditions.maximum
     (by omega) conditions.churnRoom computed
 
+/-- Before Altair, the flags of each pending attestation of the previous epoch are computed.
+
+Each must target the previous epoch, have its slot in it, and have the previous justified source.
+
+The state must be past its first epoch.
+
+Its slot plus the length of the buffer of block roots must fit in 64 bits.
+
+An epoch must have two slots at least, and the buffer of block roots must reach the epoch before.
+
+The parent slot can be any slot. -/
+theorem getAttestationParticipationFlagIndices_exists_ok_of_voted
+    {votes : Set (ValidatorIndex × AttestationData)} {state : BeaconState preset fork}
+    (before : fork < .altair) (roots : preset.RootsReachPreviousEpoch)
+    (voted : PendingVoted votes state) (started : 0 < (getCurrentEpoch state).toNat)
+    (room : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat < 2 ^ 64)
+    {attestation : PendingAttestation preset}
+    (member : attestation ∈ (state.previousEpochAttestations before).data) (parentSlot : Slot) :
+    ∃ flags, getAttestationParticipationFlagIndices state attestation.data
+      attestation.inclusionDelay parentSlot = .ok flags := by
+  obtain ⟨target, slotEpoch, source, -⟩ := voted before false attestation member
+  simp only [Bool.false_eq_true, ↓reduceIte] at target source
+  have twoSlots := roots.twoSlots
+  have reach := roots.reach
+  have current := getCurrentEpoch_toNat state
+  have previous := getPreviousEpoch_toNat state
+  have slotEpochNat : attestation.data.slot.toNat / preset.SLOTS_PER_EPOCH.toNat =
+      (getCurrentEpoch state).toNat - 1 := by
+    rw [← previous, ← target, ← slotEpoch]
+    simp [computeEpochAtSlot, UInt64.toNat_div]
+  have targetNat : attestation.data.target.epoch.toNat = (getCurrentEpoch state).toNat - 1 := by
+    rw [target, previous]
+  -- The slot of the state is in the current epoch, and the attestation slot in the previous one.
+  have stateSplit := Nat.div_add_mod state.slot.toNat preset.SLOTS_PER_EPOCH.toNat
+  have stateMod := Nat.mod_lt state.slot.toNat (by omega : 0 < preset.SLOTS_PER_EPOCH.toNat)
+  have slotSplit := Nat.div_add_mod attestation.data.slot.toNat preset.SLOTS_PER_EPOCH.toNat
+  have slotMod := Nat.mod_lt attestation.data.slot.toNat
+    (by omega : 0 < preset.SLOTS_PER_EPOCH.toNat)
+  rw [← current] at stateSplit
+  rw [slotEpochNat] at slotSplit
+  have back : preset.SLOTS_PER_EPOCH.toNat * (getCurrentEpoch state).toNat =
+      preset.SLOTS_PER_EPOCH.toNat * ((getCurrentEpoch state).toNat - 1) +
+        preset.SLOTS_PER_EPOCH.toNat := by
+    rw [Nat.mul_sub, Nat.mul_one]
+    have := Nat.le_mul_of_pos_right preset.SLOTS_PER_EPOCH.toNat started
+    omega
+  have epochStart : attestation.data.target.epoch.toNat * preset.SLOTS_PER_EPOCH.toNat =
+      preset.SLOTS_PER_EPOCH.toNat * ((getCurrentEpoch state).toNat - 1) := by
+    rw [targetNat, Nat.mul_comm]
+  obtain ⟨targetRoot, targetOk⟩ := getBlockRoot_exists (state := state)
+    (epoch := attestation.data.target.epoch) (by omega) (by omega) (by omega)
+  obtain ⟨slotRoot, slotOk⟩ := getBlockRootAtSlot_exists (state := state)
+    (slot := attestation.data.slot) (by omega) (by omega) (by omega) (by omega)
+  have older : attestation.data.target.epoch ≠ getCurrentEpoch state := fun same => by
+    rw [same] at targetNat
+    omega
+  have notGloas : ¬ Fork.glamsterdam ≤ fork := fun gloas =>
+    absurd (Nat.lt_of_le_of_lt gloas before) (by decide)
+  unfold getAttestationParticipationFlagIndices
+  simp only [targetOk, slotOk, older, ↓reduceIte, source, notGloas, ↓reduceDIte]
+  exact ⟨_, rfl⟩
+
 /-- The upgrade from the fork of a bounded state to the next fork succeeds.
 
 The upgrade must be due, so the fork has a next fork.
 
 The state keeps the shape and, before Altair, the pending attestations resolve.
 
-Before Altair, it assumes the participation flags of each previous pending attestation are computed.
+Before Altair, each pending attestation must have the target, slot and source its block checked.
 
-That includes the reads of the block roots, which no bound gives.
+Before Altair, the slot of the state must not be zero.
 
 Its epoch is at most the last one, and the draws of the upgrade meet a validator at the cap. -/
 theorem UpgradeReady.of_run {start : RunStart} {budget epochs lastEpoch elapsed : Nat}
@@ -507,10 +570,8 @@ theorem UpgradeReady.of_run {start : RunStart} {budget epochs lastEpoch elapsed 
     (counted : elapsed ≤ epochs)
     (ended : (getCurrentEpoch forked.state).toNat ≤ lastEpoch)
     (draws : UpgradeDraws forked) (due : upgradeDue config forked = true)
-    (flagged : ∀ before : forked.fork < .altair,
-      ∀ attestation ∈ (forked.state.previousEpochAttestations before).data,
-        ∃ flags, getAttestationParticipationFlagIndices forked.state attestation.data
-          attestation.inclusionDelay forked.state.latestBlockHeader.slot = .ok flags) :
+    {votes : Set (ValidatorIndex × AttestationData)} (voted : PendingVoted votes forked.state)
+    (started : forked.fork < .altair → forked.state.slot ≠ 0) :
     UpgradeReady forked := by
   have summedLe := holds.effective_le conditions counted
   have budgetLt := conditions.budget_lt
@@ -546,7 +607,32 @@ theorem UpgradeReady.of_run {start : RunStart} {budget epochs lastEpoch elapsed 
         sizeLe.trans load.2.2, Nat.lt_of_le_of_lt (Nat.mul_le_mul_left _ sizeLe) loadRoom.1⟩,
       fun attestation member => ?_⟩
     have listed := Array.mem_toList_iff.mp member
-    exact ⟨flagged (by decide) attestation listed, resolved (by decide) attestation (.inl listed)⟩
+    have twoSlots := conditions.roots.twoSlots
+    have current := getCurrentEpoch_toNat pre
+    have split := Nat.div_add_mod pre.slot.toNat preset.SLOTS_PER_EPOCH.toNat
+    have below := Nat.mod_lt pre.slot.toNat (by omega : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    rw [← current] at split
+    -- The slot is in the current epoch, so it lies below the end of the lookahead.
+    have within : preset.SLOTS_PER_EPOCH.toNat * ((getCurrentEpoch pre).toNat + 1) ≤
+        ((getCurrentEpoch pre).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1) *
+          preset.SLOTS_PER_EPOCH.toNat := by
+      rw [Nat.mul_comm]
+      exact Nat.mul_le_mul_right _ (by omega)
+    rw [Nat.mul_add, Nat.mul_one] at within
+    -- The upgrade is due at the first slot of an epoch, and that slot is not zero.
+    have first : pre.slot.toNat % preset.SLOTS_PER_EPOCH.toNat = 0 := by
+      simp only [upgradeDue, Bool.and_eq_true, beq_iff_eq] at due
+      have := congrArg UInt64.toNat due.1
+      simpa [UInt64.toNat_mod] using this
+    have nonzero : pre.slot.toNat ≠ 0 := fun zero =>
+      started (by decide) (UInt64.toNat_inj.mp (by simpa))
+    have positive : 0 < (getCurrentEpoch pre).toNat := by
+      rcases Nat.eq_zero_or_pos (getCurrentEpoch pre).toNat with zero | pos
+      · rw [zero, Nat.mul_zero] at split
+        omega
+      · exact pos
+    exact ⟨getAttestationParticipationFlagIndices_exists_ok_of_voted (by decide) conditions.roots
+      voted positive (by omega) listed _, resolved (by decide) attestation (.inl listed)⟩
   | altair => trivial
   | bellatrix => trivial
   | shapella => trivial
