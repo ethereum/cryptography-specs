@@ -253,7 +253,33 @@ The climbs queried every message they hash, so the cache holds both, by `cached_
 Beyond the adversary's own queries, `Q` grows with the depth, not with the `2^depth` leaves.
 With SHA-256 in place of the oracle, `branchWins_sha256_iff` shows that a win is two different leaves that `isValidMerkleBranch` accepts at one depth, index and root.
 The specification hashes with SHA-256, and the step from SHA-256 to the oracle is the idealisation of A4, not a theorem.
-The light client, data availability and deposit proofs bind their branches with SHA-256, and no theorem composes them with this bound.
+
+`Consensus/Proofs/DataAvailability/BlobRandomOracle.lean` composes this bound with `verifyBlobSidecarInclusionProof`, the inclusion check of blob sidecars.
+The preset and the fork are fixed before the run, and an adversary outputs two blob sidecars.
+The extraction roots both commitments, reads the subtree index of the first blob index as the check does, and climbs both proofs.
+Every hash is an oracle call, and the climbs take the inclusion proof depth of the preset.
+The adversary wins when the sidecars have one index, one body root and different commitments, and both climbs reach that body root.
+Only the forks from Deneb and before Gloas put the commitments in the body.
+At the other forks the extraction reads no subtree index, so it climbs nothing and no adversary wins; no theorem states this.
+
+`collision_of_extractBlobSidecars` shows that every win leaves two different cached inputs with one answer.
+By `hashTreeRootM_bytes48` (`Serialization/Proofs/Ssz/BranchRandomOracle.lean`), the root of a commitment is one hash of its 48 bytes and 16 zero bytes.
+So equal roots of two different commitments are two such inputs.
+Two different roots that climb to one body root give the inputs that `collision_of_extractBranches` finds.
+`prEvent_experimentWith_le` then gives `prEvent_blobWins_le`, which bounds a win by `Q^2 / N`, and `prEvent_blobWins_le_two_pow` states it with `N = 2^256`.
+`extractBlobSidecars_queryBound` shows that the extraction makes one query per commitment root and at most `2 * depth` for the climbs.
+`experimentWith_extractBlobSidecars_queryBound` adds the adversary's queries, through `experimentWith_queryBound`, which the branch bound shares.
+`prEvent_blobWins_le_of_adversary` states the bound with `Q = q + 2 + 2 * depth`, for an adversary that makes at most `q` queries.
+At the mainnet depth of 17, `prEvent_blobWins_le_mainnet` bounds a win by `(q + 36)^2 / 2^256`.
+Beyond the adversary's own queries, `Q` grows with the depth only, not with the blobs or the body.
+With SHA-256 in place of the oracle, `blobWins_sha256_iff` shows that a win is two such sidecars that `verifyBlobSidecarInclusionProof` accepts.
+Carrying the bound over to SHA-256 is the idealisation of A4, not a theorem.
+
+These other branch checks also hash with SHA-256, and no theorem composes their proofs with the branch bound:
+
+- The light client checks of bootstraps and updates, from Altair, and of headers, from Capella.
+- `verifyKzgCommitmentsInclusionProof`, which data column sidecars and partial data column headers read at Fulu.
+- The deposit branch check of `processDeposit`, before Heze.
 
 ### leanSPHINCS
 
@@ -5507,6 +5533,7 @@ The binding of a proof of possession shares the bullet of leanXMSS, and the code
   The roots of the all-zero subtrees, constants of the specification, are oracle answers in the model.
   The type is fixed before the run, except in the layout bound, where the adversary picks both types.
   The branch bound fixes the depth before the run, and its adversary picks the index, the leaves and the branches.
+  The blob sidecar bound fixes the preset and the fork before the run, and its adversary picks both sidecars.
   Each new input receives 32 independent uniform bytes, repeated inputs receive the same answer, and the initial cache is empty.
   Only classical queries are counted, and the adversary's private sampling is not.
   The bound says nothing about an attack that uses the structure of SHA-256.

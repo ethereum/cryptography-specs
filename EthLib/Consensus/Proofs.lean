@@ -71,6 +71,7 @@ public import EthLib.Consensus.Proofs.Containers.Signing
 public import EthLib.Consensus.Proofs.Containers.State
 public import EthLib.Consensus.Proofs.Containers.SyncCommittee
 public import EthLib.Consensus.Proofs.DataAvailability.Blob
+public import EthLib.Consensus.Proofs.DataAvailability.BlobRandomOracle
 public import EthLib.Consensus.Proofs.DataAvailability.Column
 public import EthLib.Consensus.Proofs.DataAvailability.Custody
 public import EthLib.Consensus.Proofs.DepositTree
