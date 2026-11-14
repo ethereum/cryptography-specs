@@ -3875,6 +3875,12 @@ A tag, and a hash in the object of EIP-1898, read back (`blockNumberOrTagOrHash_
 A number reads back when its text is no hash (`blockNumberOrTagOrHash_number`), which holds below `2^252` (`hash32_quantityJson_of_lt`).
 
 The request and the response objects of JSON-RPC 2.0 read back from their writers (`request_requestJson`, `response_responseJson`), a result of `null` included, and so does the identifier of a request (`requestId_requestIdJson`).
+An identifier reads exactly from a string, a number or `null` (`requestId_eq_ok_iff`, `Proofs/Rpc/Request.lean`).
+A JSON value reads as a request exactly when it is an object of this form (`request_eq_ok_iff`).
+Its only members are `jsonrpc`, `id`, `method` and `params`.
+Its `jsonrpc` is the string `2.0`, its `id` a string, a number or `null`, and its `method` a string.
+Its `params`, when present, is an array.
+By that theorem, the reader refuses a request without the version, with its parameters by name, or with an identifier of another type.
 The error codes of the source come in groups.
 Every code of a group that declares a range lies in that range (`code_mem_range`, `Proofs/Rpc/Errors.lean`).
 No code appears twice (`codes_nodup`), and the code `4444` of pruned history is in no group (`prunedHistoryUnavailable_not_mem`).
@@ -4057,6 +4063,17 @@ A request that names no fee takes no wei from its sender before its message (`pr
 Such a request, from a sender that holds its value, never fails with code 809 (`ethCall_ne_insufficientFunds`).
 Since it pays no fee, that is how EthLib meets the rule of the source.
 A sender that holds less than the value of its request gets no data (`ethCall_ne_ok_of_balance_lt_value`).
+A request makes a transaction exactly when it passes the checks of its kind (`exists_toTransaction_eq_ok_iff`).
+Its kind is at most 4, and a request of type 3 or 4 names a recipient.
+A gas price, a fee cap, a priority fee, an access list, blob hashes, a blob fee cap or authorizations appear only in the kinds that carry them.
+A chain that it names is that of the node.
+The nonce, the gas limit and the fee cap that the call gives are below `2^256`.
+So is each number of the request that the transaction carries.
+That transaction has the kind, value, recipient, data and lists of the request, and the nonce and gas limit that the call gives (`type_of_toTransaction_eq_ok` and the lemmas next to it).
+Its fee cap is the gas price of the request, or 0, up to type 1, and the cap that the call gives from type 2.
+Its price per gas is that gas price up to type 1.
+From type 2 it is the base fee plus the priority fee, cut to the fee cap above the base fee.
+From type 1 it names the chain of the node, and its signature is 0.
 
 The source leaves most of the call to the node, and `CallChoices` takes those choices as one input:
 
